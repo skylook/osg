@@ -719,6 +719,12 @@ InteractiveImageHandler::InteractiveImageHandler(osg::Image* image, osg::Texture
 bool InteractiveImageHandler::mousePosition(osgViewer::View* view, osg::NodeVisitor* nv, const osgGA::GUIEventAdapter& ea, int& x, int &y) const
 {
     if (!view) return false;
+    if (_fullscreen)
+    {
+        x = (int) ea.getX();
+        y = (int) ea.getY();
+        return true;
+    }
 
     osgUtil::LineSegmentIntersector::Intersections intersections;
     bool foundIntersection = (nv==0) ? view->computeIntersections(ea, intersections) :

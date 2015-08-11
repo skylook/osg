@@ -33,6 +33,11 @@
 
 using namespace osgDAE;
 
+#ifdef COLLADA_DOM_2_4_OR_LATER
+#include <dom/domAny.h>
+using namespace ColladaDOM141;
+#endif
+
 template <typename T>
 void daeReader::getTransparencyCounts(daeDatabase* database, int& zero, int& one) const
 {
@@ -383,7 +388,7 @@ void daeReader::processProfileCOMMON(osg::StateSet *ss, domProfile_COMMON *pc )
         {
             // Diffuse texture will defeat specular highlighting
             // So postpone specular - Not sure if I should do this here
-            // beacuse it will override any global light model states
+            // because it will override any global light model states
             osg::LightModel* lightmodel = new osg::LightModel;
             lightmodel->setColorControl(osg::LightModel::SEPARATE_SPECULAR_COLOR);
             ss->setAttributeAndModes(lightmodel, osg::StateAttribute::ON);
@@ -457,7 +462,7 @@ void daeReader::processProfileCOMMON(osg::StateSet *ss, domProfile_COMMON *pc )
         {
             // Diffuse texture will defeat specular highlighting
             // So postpone specular - Not sure if I should do this here
-            // beacuse it will override any global light model states
+            // because it will override any global light model states
             osg::LightModel* lightmodel = new osg::LightModel;
             lightmodel->setColorControl(osg::LightModel::SEPARATE_SPECULAR_COLOR);
             ss->setAttributeAndModes(lightmodel, osg::StateAttribute::ON);
@@ -1048,7 +1053,7 @@ osg::Texture2D* daeReader::processTexture(
             return NULL;
         }
 
-        if (sampler->getSource() == NULL )
+        if (sampler->getSource() == NULL || sampler->getSource()->getValue() == NULL)
         {
             OSG_WARN << "Could not locate source for sampler2D" << std::endl;
             return NULL;

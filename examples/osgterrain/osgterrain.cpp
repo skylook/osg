@@ -33,9 +33,11 @@
 #include <osgTerrain/Terrain>
 #include <osgTerrain/TerrainTile>
 #include <osgTerrain/GeometryTechnique>
+#include <osgTerrain/DisplacementMappingTechnique>
 #include <osgTerrain/Layer>
 
-#include "ShaderTerrain.h"
+#include <osgFX/MultiTextureControl>
+
 
 #include <iostream>
 
@@ -79,8 +81,9 @@ T* findTopMostNodeOfType(osg::Node* node)
 class TerrainHandler : public osgGA::GUIEventHandler {
 public:
 
-    TerrainHandler(osgTerrain::Terrain* terrain):
-        _terrain(terrain) {}
+    TerrainHandler(osgTerrain::Terrain* terrain, osgFX::MultiTextureControl* mtc):
+        _terrain(terrain),
+        _mtc(mtc) {}
 
     bool handle(const osgGA::GUIEventAdapter& ea,osgGA::GUIActionAdapter& aa)
     {
@@ -112,6 +115,61 @@ public:
                     osg::notify(osg::NOTICE)<<"Vertical scale "<<_terrain->getVerticalScale()<<std::endl;
                     return true;
                 }
+                else if (ea.getKey()=='!') // shift 1
+                {
+                    assignTextureWeightToSingleTextureUnit(1);
+                    return true;
+                }
+                else if (ea.getKey()=='"') // shift 1
+                {
+                    assignTextureWeightToSingleTextureUnit(2);
+                    return true;
+                }
+                else if (ea.getKey()==')') // shift 1
+                {
+                    assignTextureWeightToSingleTextureUnit(0);
+                    return true;
+                }
+                else if (ea.getKey()=='A')
+                {
+                    assignedToAll();
+                    return true;
+                }
+                else if (ea.getKey()=='l')
+                {
+                    toggleDefine("LIGHTING");
+                    return true;
+                }
+                else if (ea.getKey()=='h')
+                {
+                    toggleDefine("HEIGHTFIELD_LAYER");
+                    return true;
+                }
+                else if (ea.getKey()=='t')
+                {
+                    toggleDefine("TEXTURE_2D");
+                    return true;
+                }
+                else if (ea.getKey()=='y')
+                {
+                    toggleDefine("COLOR_LAYER0");
+                    return true;
+                }
+                else if (ea.getKey()=='u')
+                {
+                    toggleDefine("COLOR_LAYER1");
+                    return true;
+                }
+                else if (ea.getKey()=='i')
+                {
+                    toggleDefine("COLOR_LAYER2");
+                    return true;
+                }
+                else if (ea.getKey()=='d')
+                {
+                    toggleDefine("COMPUTE_DIAGONALS", osg::StateAttribute::OFF);
+                    return true;
+                }
 
                 return false;
             }
@@ -120,13 +178,49 @@ public:
         }
     }
 
+    void toggleDefine(const std::string& defineName, int expectedDefault=osg::StateAttribute::ON)
+    {
+        osg::StateSet::DefineList& defineList = _terrain->getOrCreateStateSet()->getDefineList();
+        osg::StateSet::DefineList::iterator itr = defineList.find(defineName);
+        if (itr==defineList.end())
+        {
+            defineList[defineName].second = (expectedDefault | osg::StateAttribute::OVERRIDE); // assume the defines start off.
+            itr = defineList.find(defineName);
+        }
+
+        osg::StateSet::DefinePair& dp = itr->second;
+        if ( (dp.second & osg::StateAttribute::ON)==0) dp.second = (osg::StateAttribute::ON | osg::StateAttribute::OVERRIDE);
+        else dp.second = (osg::StateAttribute::OFF | osg::StateAttribute::OVERRIDE);
+
+
+    }
+
 protected:
 
     ~TerrainHandler() {}
 
-    osg::ref_ptr<osgTerrain::Terrain>  _terrain;
-};
+    void assignTextureWeightToSingleTextureUnit(unsigned int unit)
+    {
+        if (!_mtc) return;
+        for(unsigned int i=0; i<_mtc->getNumTextureWeights(); ++i)
+        {
+            _mtc->setTextureWeight(i, (i==unit) ? 1.0f : 0.0f);
+        }
+    }
 
+    void assignedToAll()
+    {
+        if (!_mtc && _mtc->getNumTextureWeights()>0) return;
+        float div = 1.0f/static_cast<float>(_mtc->getNumTextureWeights());
+        for(unsigned int i=0; i<_mtc->getNumTextureWeights(); ++i)
+        {
+            _mtc->setTextureWeight(i, div);
+        }
+    }
+
+    osg::ref_ptr<osgTerrain::Terrain>           _terrain;
+    osg::ref_ptr<osgFX::MultiTextureControl>    _mtc;
+};
 
 class CleanTechniqueReadFileCallback : public osgDB::ReadFileCallback
 {
@@ -238,12 +332,15 @@ int main(int argc, char** argv)
         else if (strBlendingPolicy == "ENABLE_BLENDING_WHEN_ALPHA_PRESENT") blendingPolicy = osgTerrain::TerrainTile::ENABLE_BLENDING_WHEN_ALPHA_PRESENT;
     }
 
-    bool useShaderTerrain = arguments.read("--shader") || arguments.read("-s");
-    if (useShaderTerrain)
+    bool useDisplacementMappingTechnique = arguments.read("--dm");
+    if (useDisplacementMappingTechnique)
     {
         osgDB::Registry::instance()->setReadFileCallback(new CleanTechniqueReadFileCallback());
     }
 
+    bool setDatabaseThreadAffinity = false;
+    unsigned int cpuNum = 0;
+    while(arguments.read("--db-affinity", cpuNum)) { setDatabaseThreadAffinity = true; }
 
     // load the nodes from the commandline arguments.
     osg::ref_ptr<osg::Node> rootnode = osgDB::readNodeFiles(arguments);
@@ -282,18 +379,34 @@ int main(int argc, char** argv)
     terrain->setVerticalScale(verticalScale);
     terrain->setBlendingPolicy(blendingPolicy);
 
-    if (useShaderTerrain)
+
+    if (useDisplacementMappingTechnique)
     {
-        terrain->setTerrainTechniquePrototype(new osgTerrain::ShaderTerrain());
+        terrain->setTerrainTechniquePrototype(new osgTerrain::DisplacementMappingTechnique());
     }
 
 
     // register our custom handler for adjust Terrain settings
-    viewer.addEventHandler(new TerrainHandler(terrain.get()));
+    viewer.addEventHandler(new TerrainHandler(terrain.get(), findTopMostNodeOfType<osgFX::MultiTextureControl>(rootnode.get())));
 
     // add a viewport to the viewer and attach the scene graph.
     viewer.setSceneData( rootnode.get() );
 
+    // if required set the DatabaseThread affinity, note must call after viewer.setSceneData() so that the osgViewer::Scene object is constructed with it's DatabasePager.
+    if (setDatabaseThreadAffinity)
+    {
+        for (unsigned int i=0; i<viewer.getDatabasePager()->getNumDatabaseThreads(); ++i)
+        {
+            osgDB::DatabasePager::DatabaseThread* thread = viewer.getDatabasePager()->getDatabaseThread(i);
+            thread->setProcessorAffinity(cpuNum);
+            OSG_NOTICE<<"Settings affinity of DatabaseThread="<<thread<<" isRunning()="<<thread->isRunning()<<" cpuNum="<<cpuNum<<std::endl;
+        }
+    }
+
+    // following are tests of the #pragma(tic) shader composition
+    //terrain->getOrCreateStateSet()->setDefine("NUM_LIGHTS", "1");
+    //terrain->getOrCreateStateSet()->setDefine("LIGHTING"); // , osg::StateAttribute::OFF|osg::StateAttribute::OVERRIDE);
+    //terrain->getOrCreateStateSet()->setDefine("COMPUTE_DIAGONALS"); // , osg::StateAttribute::OFF|osg::StateAttribute::OVERRIDE);
 
     // run the viewers main loop
     return viewer.run();

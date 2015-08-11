@@ -295,7 +295,7 @@ unsigned int GraphicsContext::createNewContextID()
     OSG_INFO<<"GraphicsContext::createNewContextID() creating contextID="<<contextID<<std::endl;
     OSG_INFO<<"Updating the MaxNumberOfGraphicsContexts to "<<contextID+1<<std::endl;
 
-    // update the the maximum number of graphics contexts,
+    // update the maximum number of graphics contexts,
     // to ensure that texture objects and display buffers are configured to the correct size.
     osg::DisplaySettings::instance()->setMaxNumberOfGraphicsContexts( contextID + 1 );
 
@@ -586,7 +586,7 @@ void GraphicsContext::close(bool callCloseImplementation)
 
 
     // now discard any deleted deleted OpenGL objects that the are still hanging around - such as due to
-    // the the flushDelete*() methods not being invoked, such as when using GraphicContextEmbedded where makeCurrent
+    // the flushDelete*() methods not being invoked, such as when using GraphicContextEmbedded where makeCurrent
     // does not work.
     if ( !sharedContextExists && _state.valid())
     {
@@ -982,30 +982,9 @@ void GraphicsContext::resizedImplementation(int x, int y, int width, int height)
 //
 // SyncSwapBuffersCallback
 //
-SyncSwapBuffersCallback::SyncSwapBuffersCallback():
-    _extensionInitialized(false),
-    _glFenceSync(0),
-    _glIsSync(0),
-    _glDeleteSync(0),
-    _glClientWaitSync(0),
-    _glWaitSync(0),
-    _glGetInteger64v(0),
-    _glGetSynciv(0),
-    _previousSync(0)
+SyncSwapBuffersCallback::SyncSwapBuffersCallback()
 {
-        OSG_NOTICE<<"Created Swap callback."<<std::endl;
-}
-
-void SyncSwapBuffersCallback::setUpExtensions()
-{
-    _extensionInitialized = true;
-    osg::setGLExtensionFuncPtr(_glFenceSync, "glFenceSync");
-    osg::setGLExtensionFuncPtr(_glIsSync, "glIsSync");
-    osg::setGLExtensionFuncPtr(_glDeleteSync, "glDeleteSync");
-    osg::setGLExtensionFuncPtr(_glClientWaitSync, "glClientWaitSync");
-    osg::setGLExtensionFuncPtr(_glWaitSync, "glWaitSync");
-    osg::setGLExtensionFuncPtr(_glGetInteger64v, "glGetInteger64v");
-    osg::setGLExtensionFuncPtr(_glGetSynciv, "glGetSynciv");
+    OSG_INFO<<"Created SyncSwapBuffersCallback."<<std::endl;
 }
 
 void SyncSwapBuffersCallback::swapBuffersImplementation(osg::GraphicsContext* gc)
@@ -1014,20 +993,19 @@ void SyncSwapBuffersCallback::swapBuffersImplementation(osg::GraphicsContext* gc
     gc->swapBuffersImplementation();
     //glFinish();
 
-    if (!_extensionInitialized) setUpExtensions();
+    GLExtensions* ext = gc->getState()->get<GLExtensions>();
 
-    if (_glClientWaitSync)
+    if (ext->glClientWaitSync)
     {
         if (_previousSync)
         {
             unsigned int num_seconds = 1;
             GLuint64 timeout = num_seconds * ((GLuint64)1000 * 1000 * 1000);
-            _glClientWaitSync(_previousSync, 0, timeout);
-
-            _glDeleteSync(_previousSync);
+            ext->glClientWaitSync(_previousSync, 0, timeout);
+            ext->glDeleteSync(_previousSync);
         }
 
-        _previousSync = _glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+        _previousSync = ext->glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
     }
     //gc->getState()->checkGLErrors("after glWaitSync");
 

@@ -157,18 +157,12 @@ int ImagePager::ImageThread::cancel()
         // release the frameBlock and _databasePagerThreadBlock in case its holding up thread cancellation.
         // _databasePagerThreadBlock->release();
 
-        // then wait for the the thread to stop running.
-        while(isRunning())
-        {
-            // commenting out debug info as it was cashing crash on exit, presumable
-            // due to osg::notify or std::cout destructing earlier than this destructor.
-            // OSG_DEBUG<<"Waiting for DatabasePager to cancel"<<std::endl;
-            OpenThreads::Thread::YieldCurrentThread();
-        }
+        // then wait for the thread to stop running.
+        join();
 
         // _startThreadCalled = false;
     }
-    //std::cout<<"DatabasePager::~DatabasePager() stopped running"<<std::endl;
+    //std::cout<<"ImagePager::cancel() thread stopped running"<<std::endl;
     return result;
 }
 

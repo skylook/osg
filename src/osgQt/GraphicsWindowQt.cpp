@@ -15,6 +15,7 @@
 #include <osgQt/GraphicsWindowQt>
 #include <osgViewer/ViewerBase>
 #include <QInputEvent>
+#include <QPointer>
 
 #if (QT_VERSION>=QT_VERSION_CHECK(4, 6, 0))
 # define USE_GESTURES
@@ -119,18 +120,24 @@ static QtKeyboardMap s_QtKeyboardMap;
 /// The object responsible for the scene re-rendering.
 class HeartBeat : public QObject {
 public:
-int _timerId;
-osg::Timer _lastFrameStartTime;
-osg::observer_ptr< osgViewer::ViewerBase > _viewer;
+    int _timerId;
+    osg::Timer _lastFrameStartTime;
+    osg::observer_ptr< osgViewer::ViewerBase > _viewer;
 
-HeartBeat();
-virtual ~HeartBeat();
-void init( osgViewer::ViewerBase *viewer );
-void stopTimer();
-void timerEvent( QTimerEvent *event );
+    virtual ~HeartBeat();
+    
+    void init( osgViewer::ViewerBase *viewer );
+    void stopTimer();
+    void timerEvent( QTimerEvent *event );
+
+    static HeartBeat* instance();
+private:
+    HeartBeat();
+
+    static QPointer<HeartBeat> heartBeat;
 };
 
-static HeartBeat heartBeat;
+QPointer<HeartBeat> HeartBeat::heartBeat;
 
 #if (QT_VERSION < QT_VERSION_CHECK(5, 2, 0))
     #define GETDEVICEPIXELRATIO() 1.0
@@ -141,8 +148,8 @@ static HeartBeat heartBeat;
 GLWidget::GLWidget( QWidget* parent, const QGLWidget* shareWidget, Qt::WindowFlags f, bool forwardKeyEvents )
 : QGLWidget(parent, shareWidget, f),
 _gw( NULL ),
-_forwardKeyEvents( forwardKeyEvents ),
-_touchEventsEnabled( false )
+_touchEventsEnabled( false ),
+_forwardKeyEvents( forwardKeyEvents )
 {
     _devicePixelRatio = GETDEVICEPIXELRATIO();
 }
@@ -151,8 +158,8 @@ GLWidget::GLWidget( QGLContext* context, QWidget* parent, const QGLWidget* share
                     bool forwardKeyEvents )
 : QGLWidget(context, parent, shareWidget, f),
 _gw( NULL ),
-_forwardKeyEvents( forwardKeyEvents ),
-_touchEventsEnabled( false )
+_touchEventsEnabled( false ),
+_forwardKeyEvents( forwardKeyEvents )
 {
     _devicePixelRatio = GETDEVICEPIXELRATIO();
 }
@@ -161,8 +168,8 @@ GLWidget::GLWidget( const QGLFormat& format, QWidget* parent, const QGLWidget* s
                     bool forwardKeyEvents )
 : QGLWidget(format, parent, shareWidget, f),
 _gw( NULL ),
-_forwardKeyEvents( forwardKeyEvents ),
-_touchEventsEnabled( false )
+_touchEventsEnabled( false ),
+_forwardKeyEvents( forwardKeyEvents )
 {
     _devicePixelRatio = GETDEVICEPIXELRATIO();
 }
@@ -565,7 +572,7 @@ bool GraphicsWindowQt::init( QWidget* parent, const QGLWidget* shareWidget, Qt::
     }
 
     // make sure the event queue has the correct window rectangle size and input range
-    getEventQueue()->syncWindowRectangleWithGraphcisContext();
+    getEventQueue()->syncWindowRectangleWithGraphicsContext();
 
     return true;
 }
@@ -783,7 +790,7 @@ bool GraphicsWindowQt::realizeImplementation()
     _realized = true;
 
     // make sure the event queue has the correct window rectangle size and input range
-    getEventQueue()->syncWindowRectangleWithGraphcisContext();
+    getEventQueue()->syncWindowRectangleWithGraphicsContext();
 
     // make this window's context not current
     // note: this must be done as we will probably make the context current from another thread
@@ -955,7 +962,7 @@ void osgQt::initQtWindowingSystem()
 
 void osgQt::setViewer( osgViewer::ViewerBase *viewer )
 {
-    heartBeat.init( viewer );
+    HeartBeat::instance()->init( viewer );
 }
 
 
@@ -971,6 +978,14 @@ HeartBeat::~HeartBeat()
     stopTimer();
 }
 
+HeartBeat* HeartBeat::instance()
+{
+    if (!heartBeat)
+    {
+        heartBeat = new HeartBeat();
+    }
+    return heartBeat;
+}
 
 void HeartBeat::stopTimer()
 {

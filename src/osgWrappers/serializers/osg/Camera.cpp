@@ -104,55 +104,6 @@ static void writeBufferAttachment( osgDB::OutputStream& os, const osg::Camera::A
     os << os.PROPERTY("MultisampleColorSamples") << attachment._multisampleColorSamples << std::endl;
 }
 
-// _clearMask
-static bool checkClearMask( const osg::Camera& node )
-{
-    return node.getClearMask()!=(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-}
-
-static bool readClearMask( osgDB::InputStream& is, osg::Camera& node )
-{
-    GLbitfield mask = 0;
-    if ( is.isBinary() )
-    {
-        int maskValue; is >> maskValue;
-        mask = (GLbitfield)maskValue;
-    }
-    else
-    {
-        std::string maskSetString; is >> maskSetString;
-        osgDB::StringList maskList; osgDB::split( maskSetString, maskList, '|' );
-        for ( unsigned int i=0; i<maskList.size(); ++i )
-        {
-            const std::string& maskValue = maskList[i];
-            if ( maskValue=="COLOR" ) mask |= GL_COLOR_BUFFER_BIT;
-            else if ( maskValue=="DEPTH" ) mask |= GL_DEPTH_BUFFER_BIT;
-            else if ( maskValue=="ACCUM" ) mask |= GL_ACCUM_BUFFER_BIT;
-            else if ( maskValue=="STENCIL" ) mask |= GL_STENCIL_BUFFER_BIT;
-        }
-    }
-    node.setClearMask( mask );
-    return true;
-}
-
-static bool writeClearMask( osgDB::OutputStream& os, const osg::Camera& node )
-{
-    GLbitfield mask = node.getClearMask();
-    if ( os.isBinary() )
-        os << (int)mask;
-    else
-    {
-        std::string maskString;
-        if ( mask==GL_COLOR_BUFFER_BIT ) maskString += std::string("COLOR|");
-        if ( mask==GL_DEPTH_BUFFER_BIT ) maskString += std::string("DEPTH|");
-        if ( mask==GL_ACCUM_BUFFER_BIT ) maskString += std::string("ACCUM|");
-        if ( mask==GL_STENCIL_BUFFER_BIT ) maskString += std::string("STENCIL|");
-        if ( !maskString.size() ) maskString = std::string("NONE|");
-        os << maskString.substr(0, maskString.size()-1) << std::endl;
-    }
-    return true;
-}
-
 // _renderOrder & _renderOrderNum
 static bool checkRenderOrder( const osg::Camera& node )
 {
@@ -234,7 +185,12 @@ REGISTER_OBJECT_WRAPPER( Camera,
                          "osg::Object osg::Node osg::Group osg::Transform osg::Camera" )
 {
     ADD_BOOL_SERIALIZER( AllowEventFocus, true );  // _allowEventFocus
-    ADD_USER_SERIALIZER( ClearMask );  // _clearMask
+    BEGIN_BITFLAGS_SERIALIZER(ClearMask,GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+        ADD_BITFLAG_VALUE(COLOR, GL_COLOR_BUFFER_BIT);
+        ADD_BITFLAG_VALUE(DEPTH, GL_DEPTH_BUFFER_BIT);
+        ADD_BITFLAG_VALUE(ACCUM, GL_ACCUM_BUFFER_BIT);
+        ADD_BITFLAG_VALUE(STENCIL, GL_STENCIL_BUFFER_BIT);
+    END_BITFLAGS_SERIALIZER();
     ADD_VEC4_SERIALIZER( ClearColor, osg::Vec4() );  // _clearColor
     ADD_VEC4_SERIALIZER( ClearAccum, osg::Vec4() );  // _clearAccum
     ADD_DOUBLE_SERIALIZER( ClearDepth, 1.0 );  // _clearDepth
@@ -264,7 +220,7 @@ REGISTER_OBJECT_WRAPPER( Camera,
         ADD_ENUM_VALUE( PIXEL_BUFFER_RTT );
         ADD_ENUM_VALUE( PIXEL_BUFFER );
         ADD_ENUM_VALUE( FRAME_BUFFER );
-        ADD_ENUM_VALUE( SEPERATE_WINDOW );
+        ADD_ENUM_VALUE( SEPARATE_WINDOW );
     END_ENUM_SERIALIZER();  // _renderTargetImplementation
 
     ADD_USER_SERIALIZER( BufferAttachmentMap );  // _bufferAttachmentMap
@@ -272,4 +228,41 @@ REGISTER_OBJECT_WRAPPER( Camera,
     ADD_OBJECT_SERIALIZER( PreDrawCallback, osg::Camera::DrawCallback, NULL );  // _preDrawCallback
     ADD_OBJECT_SERIALIZER( PostDrawCallback, osg::Camera::DrawCallback, NULL );  // _postDrawCallback
     ADD_OBJECT_SERIALIZER( FinalDrawCallback, osg::Camera::DrawCallback, NULL );  // _finalDrawCallback
+
+    {
+        UPDATE_TO_VERSION_SCOPED( 123 )
+        BEGIN_ENUM_SERIALIZER( InheritanceMaskActionOnAttributeSetting, DISABLE_ASSOCIATED_INHERITANCE_MASK_BIT );
+            ADD_ENUM_VALUE( DISABLE_ASSOCIATED_INHERITANCE_MASK_BIT );
+            ADD_ENUM_VALUE( DO_NOT_MODIFY_INHERITANCE_MASK );
+        END_ENUM_SERIALIZER();
+        
+        BEGIN_INT_BITFLAGS_SERIALIZER(InheritanceMask, osg::Camera::ALL_VARIABLES);
+            ADD_BITFLAG_VALUE(COMPUTE_NEAR_FAR_MODE, osg::Camera::COMPUTE_NEAR_FAR_MODE);
+            ADD_BITFLAG_VALUE(CULLING_MODE, osg::Camera::CULLING_MODE);
+            ADD_BITFLAG_VALUE(LOD_SCALE, osg::Camera::LOD_SCALE);
+            ADD_BITFLAG_VALUE(SMALL_FEATURE_CULLING_PIXEL_SIZE, osg::Camera::SMALL_FEATURE_CULLING_PIXEL_SIZE);
+            ADD_BITFLAG_VALUE(CLAMP_PROJECTION_MATRIX_CALLBACK, osg::Camera::CLAMP_PROJECTION_MATRIX_CALLBACK);
+            ADD_BITFLAG_VALUE(NEAR_FAR_RATIO, osg::Camera::NEAR_FAR_RATIO);            
+            ADD_BITFLAG_VALUE(IMPOSTOR_ACTIVE, osg::Camera::IMPOSTOR_ACTIVE);            
+            ADD_BITFLAG_VALUE(DEPTH_SORT_IMPOSTOR_SPRITES, osg::Camera::DEPTH_SORT_IMPOSTOR_SPRITES);
+            ADD_BITFLAG_VALUE(IMPOSTOR_PIXEL_ERROR_THRESHOLD, osg::Camera::IMPOSTOR_PIXEL_ERROR_THRESHOLD);
+            ADD_BITFLAG_VALUE(NUM_FRAMES_TO_KEEP_IMPOSTORS_SPRITES, osg::Camera::NUM_FRAMES_TO_KEEP_IMPOSTORS_SPRITES);
+            ADD_BITFLAG_VALUE(CULL_MASK, osg::Camera::CULL_MASK);
+            ADD_BITFLAG_VALUE(CULL_MASK_LEFT, osg::Camera::CULL_MASK_LEFT);
+            ADD_BITFLAG_VALUE(CULL_MASK_RIGHT, osg::Camera::CULL_MASK_RIGHT);
+            ADD_BITFLAG_VALUE(CLEAR_COLOR, osg::Camera::CLEAR_COLOR);
+            ADD_BITFLAG_VALUE(CLEAR_MASK, osg::Camera::CLEAR_MASK);
+            ADD_BITFLAG_VALUE(LIGHTING_MODE, osg::Camera::LIGHTING_MODE);
+            ADD_BITFLAG_VALUE(LIGHT, osg::Camera::LIGHT);
+            ADD_BITFLAG_VALUE(DRAW_BUFFER, osg::Camera::DRAW_BUFFER);
+            ADD_BITFLAG_VALUE(READ_BUFFER, osg::Camera::READ_BUFFER);
+            ADD_BITFLAG_VALUE(NO_VARIABLES, osg::Camera::NO_VARIABLES);
+            /** ADD_BITFLAG_VALUE(ALL_VARIABLES, osg::Camera::ALL_VARIABLES);*/
+        END_BITFLAGS_SERIALIZER();
+
+    //ALL_VARIABLES
+        
+    }
+    
+    
 }

@@ -34,7 +34,7 @@
  *
  *
  * Ported into the OSG as a plugin, Robert Osfield Decemeber 2000.
- * Note, reference above to license of simage_rgb is not relevent to the OSG
+ * Note, reference above to license of simage_rgb is not relevant to the OSG
  * as the OSG does not use it.  Also for patches, bugs and new features
  * please send them direct to the OSG dev team rather than address above.
  *
@@ -95,11 +95,10 @@ public:
     virtual void quit( bool waitForThreadToExit=true )
     {
         _done = true;
-        if ( waitForThreadToExit )
+        if (isRunning() && waitForThreadToExit)
         {
-            while( isRunning() )
-                OpenThreads::Thread::YieldCurrentThread();
-            OSG_DEBUG<<"GifImageStream thread quitted"<<std::endl;
+            cancel();
+            join();
         }
     }
 
@@ -561,7 +560,11 @@ GifImageStream** obj)
     *width_ret = giffile->SWidth;
     *height_ret = giffile->SHeight;
     *numComponents_ret = 4;
+#if (GIFLIB_MAJOR >= 5&& !(GIFLIB_MAJOR == 5 && GIFLIB_MINOR == 0))
+    DGifCloseFile(giffile, &Error);
+#else
     DGifCloseFile(giffile);
+#endif
     return buffer;
 }
 

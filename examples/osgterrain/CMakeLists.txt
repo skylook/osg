@@ -1,13 +1,8 @@
-SET(TARGET_H
-    ShaderTerrain.h
-)
-
 SET(TARGET_SRC
-    ShaderTerrain.cpp
     osgterrain.cpp
 )
 
-SET(TARGET_ADDED_LIBRARIES osgTerrain )
+SET(TARGET_ADDED_LIBRARIES osgTerrain osgFX)
 
 #### end var setup  ###
 SETUP_EXAMPLE(osgterrain)

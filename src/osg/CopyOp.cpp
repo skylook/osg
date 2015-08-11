@@ -33,10 +33,10 @@ TYPE* CopyOp::operator() (const TYPE* obj) const \
 }
 
 COPY_OP( Object,                   DEEP_COPY_OBJECTS )
-COPY_OP( Node,                     DEEP_COPY_NODES )
 COPY_OP( StateSet,                 DEEP_COPY_STATESETS )
 COPY_OP( Image,                    DEEP_COPY_IMAGES )
 COPY_OP( Uniform,                  DEEP_COPY_UNIFORMS )
+COPY_OP( UniformCallback,          DEEP_COPY_CALLBACKS )
 COPY_OP( StateAttributeCallback,   DEEP_COPY_CALLBACKS )
 COPY_OP( Drawable,                 DEEP_COPY_DRAWABLES )
 COPY_OP( Texture,                  DEEP_COPY_TEXTURES )
@@ -47,6 +47,16 @@ COPY_OP( Shape,                    DEEP_COPY_SHAPES )
 Referenced* CopyOp::operator() (const Referenced* ref) const
 {
     return const_cast<Referenced*>(ref);
+}
+
+Node* CopyOp::operator() (const Node* node) const
+{
+    if (!node) return 0;
+
+    const Drawable* drawable = node->asDrawable();
+    if (drawable) return operator()(drawable);
+    else if (_flags&DEEP_COPY_NODES) return osg::clone(node, *this);
+    else return const_cast<Node*>(node);
 }
 
 StateAttribute* CopyOp::operator() (const StateAttribute* attr) const

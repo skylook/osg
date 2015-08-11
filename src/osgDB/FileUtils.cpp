@@ -510,7 +510,7 @@ static void appendInstallationLibraryFilePaths(osgDB::FilePathList& filepath)
 #ifdef OSG_DEFAULT_LIBRARY_PATH
 
     // Append the install prefix path to the library search path if configured
-    filepath.push_back(ADDQUOTES(OSG_DEFAULT_LIBRARY_PATH));
+    filepath.push_back(OSG_DEFAULT_LIBRARY_PATH);
 #endif
 }
 
@@ -964,7 +964,7 @@ bool osgDB::containsCurrentWorkingDirectoryReference(const FilePathList& paths)
     }
 
     // The Cocoa version is about 10 lines of code.
-    // The Carbon version is noticably longer.
+    // The Carbon version is noticeably longer.
     // Unfortunately, the Cocoa version requires -lobjc to be
     // linked in when creating an executable.
     // Rumor is that this will be done autmatically in gcc 3.5/Tiger,
@@ -1094,7 +1094,7 @@ bool osgDB::containsCurrentWorkingDirectoryReference(const FilePathList& paths)
         FSRef     f;
         OSErr    errCode;
 
-        // Start with the the Bundle PlugIns directory.
+        // Start with the Bundle PlugIns directory.
 
         // Get the main bundle first. No need to retain or release it since
         //  we are not keeping a reference

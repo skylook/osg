@@ -87,7 +87,7 @@ public:
                 // update filter modes and text.
                 setValues();
 
-                // advance the current positon, wrap round if required.
+                // advance the current position, wrap round if required.
                 _currPos++;
                 if (_currPos>=_minFilterList.size()) _currPos=0;
 
@@ -246,7 +246,7 @@ public:
                 // update filter modes and text.
                 setValues();
 
-                // advance the current positon, wrap round if required.
+                // advance the current position, wrap round if required.
                 _currPos++;
                 if (_currPos>=_maxAnisotropyList.size()) _currPos=0;
 
@@ -402,7 +402,7 @@ public:
                 // update filter modes and text.
                 setValues();
 
-                // advance the current positon, wrap round if required.
+                // advance the current position, wrap round if required.
                 _currPos++;
                 if (_currPos>=_wrapList.size()) _currPos=0;
 
@@ -546,7 +546,7 @@ public:
                            originalImage->getPixelFormat(),originalImage->getDataType(), // same pixel foramt and data type
                            originalImage->data(originalImage->s()/4,originalImage->t()/4), // offset teh start point to 1/4 into the image
                            osg::Image::NO_DELETE, // don't attempt to delete the image data, leave this to the originalImage
-                           originalImage->getPacking(), // use the the same packing
+                           originalImage->getPacking(), // use the same packing
                            originalImage->s()); // use the width of the original image as the row width
 
 
@@ -596,7 +596,7 @@ public:
                 // update filter modes and text.
                 setValues();
 
-                // advance the current positon, wrap round if required.
+                // advance the current position, wrap round if required.
                 _currPos++;
                 if (_currPos>=_imageList.size()) _currPos=0;
 

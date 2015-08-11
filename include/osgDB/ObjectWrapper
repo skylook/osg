@@ -15,14 +15,12 @@
 #ifndef OSGDB_OBJECTWRAPPER
 #define OSGDB_OBJECTWRAPPER
 
+#include <OpenThreads/ReentrantMutex>
 #include <osgDB/Serializer>
 #include <osg/ScriptEngine>
 
 namespace osgDB
 {
-
-typedef std::vector<std::string> StringList;
-extern OSGDB_EXPORT void split( const std::string& src, StringList& list, char separator=' ' );
 
 struct MethodObject : public osg::Referenced
 {
@@ -171,6 +169,8 @@ protected:
 
     ObjectWrapperManager();
     virtual ~ObjectWrapperManager();
+
+    OpenThreads::ReentrantMutex _wrapperMutex;
 
     WrapperMap _wrappers;
     CompressorMap _compressors;

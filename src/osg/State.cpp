@@ -19,6 +19,7 @@
 #include <osg/ApplicationUsage>
 
 #include <sstream>
+#include <algorithm>
 
 #ifndef GL_MAX_TEXTURE_COORDS
 #define GL_MAX_TEXTURE_COORDS 0x8871
@@ -131,6 +132,13 @@ State::State():
 
 State::~State()
 {
+    // delete the GLExtensions object associated with this osg::State.
+    if (_glExtensions)
+    {
+        GLExtensions::Set(_contextID, 0);
+        _glExtensions = 0;
+    }
+
     //_texCoordArrayList.clear();
 
     //_vertexAttribArrayList.clear();
@@ -270,7 +278,7 @@ void State::reset()
     _lastAppliedProgramObject = 0;
 
     // what about uniforms??? need to clear them too...
-    // go through all active Unfirom's, setting to change to force update,
+    // go through all active Uniform's, setting to change to force update,
     // the idea is to leave only the global defaults left.
     for(UniformMap::iterator uitr=_uniformMap.begin();
         uitr!=_uniformMap.end();
@@ -331,6 +339,8 @@ void State::pushStateSet(const StateSet* dstate)
         }
 
         pushUniformList(_uniformMap,dstate->getUniformList());
+
+        pushDefineList(_defineMap,dstate->getDefineList());
     }
 
     // OSG_NOTICE<<"State::pushStateSet()"<<_stateStateStack.size()<<std::endl;
@@ -380,6 +390,8 @@ void State::popStateSet()
         }
 
         popUniformList(_uniformMap,dstate->getUniformList());
+
+        popDefineList(_defineMap,dstate->getDefineList());
 
     }
 
@@ -506,7 +518,19 @@ void State::apply(const StateSet* dstate)
         const Program::PerContextProgram* previousLastAppliedProgramObject = _lastAppliedProgramObject;
 
         applyModeList(_modeMap,dstate->getModeList());
+#if 1
+        pushDefineList(_defineMap, dstate->getDefineList());
+#else
+        applyDefineList(_defineMap, dstate->getDefineList());
+#endif
+
         applyAttributeList(_attributeMap,dstate->getAttributeList());
+
+        if ((_lastAppliedProgramObject!=0) && (previousLastAppliedProgramObject==_lastAppliedProgramObject) && _defineMap.changed)
+        {
+            // OSG_NOTICE<<"State::apply(StateSet*) Program already applied ("<<(previousLastAppliedProgramObject==_lastAppliedProgramObject)<<") and _defineMap.changed= "<<_defineMap.changed<<std::endl;
+            _lastAppliedProgramObject->getProgram()->apply(*this);
+        }
 
         if (_shaderCompositionEnabled)
         {
@@ -532,6 +556,10 @@ void State::apply(const StateSet* dstate)
                 applyUniformList(_uniformMap, _currentShaderCompositionUniformList);
             }
         }
+
+#if 1
+        popDefineList(_defineMap, dstate->getDefineList());
+#endif
 
         // pop the stateset from the stack
         _stateStateStack.pop_back();
@@ -564,8 +592,17 @@ void State::apply()
     // appropriate.
     applyModeMap(_modeMap);
 
+    const Program::PerContextProgram* previousLastAppliedProgramObject = _lastAppliedProgramObject;
+
     // go through all active StateAttribute's, applying where appropriate.
     applyAttributeMap(_attributeMap);
+
+
+    if ((_lastAppliedProgramObject!=0) && (previousLastAppliedProgramObject==_lastAppliedProgramObject) && _defineMap.changed)
+    {
+        //OSG_NOTICE<<"State::apply() Program already applied ("<<(previousLastAppliedProgramObject==_lastAppliedProgramObject)<<") and _defineMap.changed= "<<_defineMap.changed<<std::endl;
+        if (_lastAppliedProgramObject) _lastAppliedProgramObject->getProgram()->apply(*this);
+    }
 
 
     if (_shaderCompositionEnabled)
@@ -610,7 +647,7 @@ void State::applyShaderComposition()
 
         if (_currentShaderCompositionProgram)
         {
-            Program::PerContextProgram* pcp = _currentShaderCompositionProgram->getPCP(_contextID);
+            Program::PerContextProgram* pcp = _currentShaderCompositionProgram->getPCP(*this);
             if (_lastAppliedProgramObject != pcp) applyAttribute(_currentShaderCompositionProgram);
         }
     }
@@ -827,18 +864,19 @@ Polytope State::getViewFrustum() const
 }
 
 
-void State::resetVertexAttributeAlias(bool compactAliasing)
+void State::resetVertexAttributeAlias(bool compactAliasing, unsigned int numTextureUnits)
 {
     _texCoordAliasList.clear();
     _attributeBindingList.clear();
 
     if (compactAliasing)
     {
-        setUpVertexAttribAlias(_vertexAlias,0, "gl_Vertex","osg_Vertex","attribute vec4 ");
-        setUpVertexAttribAlias(_normalAlias, 1, "gl_Normal","osg_Normal","attribute vec3 ");
-        setUpVertexAttribAlias(_colorAlias, 2, "gl_Color","osg_Color","attribute vec4 ");
+        unsigned int slot = 0;
+        setUpVertexAttribAlias(_vertexAlias, slot++, "gl_Vertex","osg_Vertex","attribute vec4 ");
+        setUpVertexAttribAlias(_normalAlias, slot++, "gl_Normal","osg_Normal","attribute vec3 ");
+        setUpVertexAttribAlias(_colorAlias, slot++, "gl_Color","osg_Color","attribute vec4 ");
 
-        _texCoordAliasList.resize(5);
+        _texCoordAliasList.resize(numTextureUnits);
         for(unsigned int i=0; i<_texCoordAliasList.size(); i++)
         {
             std::stringstream gl_MultiTexCoord;
@@ -846,11 +884,11 @@ void State::resetVertexAttributeAlias(bool compactAliasing)
             gl_MultiTexCoord<<"gl_MultiTexCoord"<<i;
             osg_MultiTexCoord<<"osg_MultiTexCoord"<<i;
 
-            setUpVertexAttribAlias(_texCoordAliasList[i], 3+i, gl_MultiTexCoord.str(), osg_MultiTexCoord.str(), "attribute vec4 ");
+            setUpVertexAttribAlias(_texCoordAliasList[i], slot++, gl_MultiTexCoord.str(), osg_MultiTexCoord.str(), "attribute vec4 ");
         }
 
-        setUpVertexAttribAlias(_secondaryColorAlias, 6, "gl_SecondaryColor","osg_SecondaryColor","attribute vec4 ");
-        setUpVertexAttribAlias(_fogCoordAlias, 7, "gl_FogCoord","osg_FogCoord","attribute float ");
+        setUpVertexAttribAlias(_secondaryColorAlias, slot++, "gl_SecondaryColor","osg_SecondaryColor","attribute vec4 ");
+        setUpVertexAttribAlias(_fogCoordAlias, slot++, "gl_FogCoord","osg_FogCoord","attribute float ");
 
     }
     else
@@ -861,7 +899,8 @@ void State::resetVertexAttributeAlias(bool compactAliasing)
         setUpVertexAttribAlias(_secondaryColorAlias, 4, "gl_SecondaryColor","osg_SecondaryColor","attribute vec4 ");
         setUpVertexAttribAlias(_fogCoordAlias, 5, "gl_FogCoord","osg_FogCoord","attribute float ");
 
-        _texCoordAliasList.resize(8);
+        unsigned int base = 8;
+        _texCoordAliasList.resize(numTextureUnits);
         for(unsigned int i=0; i<_texCoordAliasList.size(); i++)
         {
             std::stringstream gl_MultiTexCoord;
@@ -869,7 +908,7 @@ void State::resetVertexAttributeAlias(bool compactAliasing)
             gl_MultiTexCoord<<"gl_MultiTexCoord"<<i;
             osg_MultiTexCoord<<"osg_MultiTexCoord"<<i;
 
-            setUpVertexAttribAlias(_texCoordAliasList[i], 8+i, gl_MultiTexCoord.str(), osg_MultiTexCoord.str(), "attribute vec4 ");
+            setUpVertexAttribAlias(_texCoordAliasList[i], base+i, gl_MultiTexCoord.str(), osg_MultiTexCoord.str(), "attribute vec4 ");
         }
     }
 }
@@ -907,7 +946,7 @@ void State::setInterleavedArrays( GLenum format, GLsizei stride, const GLvoid* p
     OSG_NOTICE<<"Warning: State::setInterleavedArrays(..) not implemented."<<std::endl;
 #endif
 
-    // the crude way, assume that all arrays have been effected so dirty them and
+    // the crude way, assume that all arrays have been affected so dirty them and
     // disable them...
     dirtyAllVertexArrays();
 }
@@ -915,6 +954,21 @@ void State::setInterleavedArrays( GLenum format, GLsizei stride, const GLvoid* p
 void State::initializeExtensionProcs()
 {
     if (_extensionProcsInitialized) return;
+    
+    
+    const char* vendor = (const char*) glGetString( GL_VENDOR );
+    if (vendor)
+    {
+        std::string str_vendor(vendor);
+        std::replace(str_vendor.begin(), str_vendor.end(), ' ', '_');
+        OSG_INFO<<"GL_VENDOR = ["<<str_vendor<<"]"<<std::endl;
+        _defineMap.map[str_vendor].defineVec.push_back(osg::StateSet::DefinePair("1",osg::StateAttribute::ON));
+        _defineMap.map[str_vendor].changed = true;
+        _defineMap.changed = true;
+    }
+
+    _glExtensions = new GLExtensions(_contextID);
+    GLExtensions::Set(_contextID, _glExtensions.get());
 
     setGLExtensionFuncPtr(_glClientActiveTexture,"glClientActiveTexture","glClientActiveTextureARB");
     setGLExtensionFuncPtr(_glActiveTexture, "glActiveTexture","glActiveTextureARB");
@@ -933,13 +987,14 @@ void State::initializeExtensionProcs()
     setGLExtensionFuncPtr(_glDrawArraysInstanced, "glDrawArraysInstanced","glDrawArraysInstancedARB","glDrawArraysInstancedEXT");
     setGLExtensionFuncPtr(_glDrawElementsInstanced, "glDrawElementsInstanced","glDrawElementsInstancedARB","glDrawElementsInstancedEXT");
 
-    if ( osg::getGLVersionNumber() >= 2.0 || osg::isGLExtensionSupported(_contextID,"GL_ARB_vertex_shader") || OSG_GLES2_FEATURES)
+    if (osg::getGLVersionNumber() >= 2.0 || osg::isGLExtensionSupported(_contextID, "GL_ARB_vertex_shader") || OSG_GLES2_FEATURES || OSG_GL3_FEATURES)
     {
         glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS,&_glMaxTextureUnits);
-        if(OSG_GLES2_FEATURES)
+        #ifdef OSG_GL_FIXED_FUNCTION_AVAILABLE
+            glGetIntegerv(GL_MAX_TEXTURE_COORDS, &_glMaxTextureCoords);
+        #else
             _glMaxTextureCoords = _glMaxTextureUnits;
-        else
-            glGetIntegerv(GL_MAX_TEXTURE_COORDS,&_glMaxTextureCoords);
+        #endif
     }
     else if ( osg::getGLVersionNumber() >= 1.3 ||
                                  osg::isGLExtensionSupported(_contextID,"GL_ARB_multitexture") ||
@@ -957,8 +1012,7 @@ void State::initializeExtensionProcs()
         _glMaxTextureCoords = 1;
     }
 
-    osg::Drawable::Extensions* extensions = osg::Drawable::getExtensions(getContextID(), true);
-    if (extensions && extensions->isARBTimerQuerySupported())
+    if (_glExtensions->isARBTimerQuerySupported)
     {
         const GLubyte* renderer = glGetString(GL_RENDERER);
         std::string rendererString = renderer ? (const char*)renderer : "";
@@ -973,7 +1027,7 @@ void State::initializeExtensionProcs()
         else
         {
             GLint bits = 0;
-            extensions->glGetQueryiv(GL_TIMESTAMP, GL_QUERY_COUNTER_BITS_ARB, &bits);
+            _glExtensions->glGetQueryiv(GL_TIMESTAMP, GL_QUERY_COUNTER_BITS_ARB, &bits);
             setTimestampBits(bits);
         }
     }
@@ -1272,23 +1326,24 @@ bool State::checkGLErrors(const char* str) const
     GLenum errorNo = glGetError();
     if (errorNo!=GL_NO_ERROR)
     {
+        osg::NotifySeverity notifyLevel = NOTICE; // WARN;
         const char* error = (char*)gluErrorString(errorNo);
         if (error)
         {
-            OSG_NOTIFY(WARN)<<"Warning: detected OpenGL error '" << error<<"'";
+            OSG_NOTIFY(notifyLevel)<<"Warning: detected OpenGL error '" << error<<"'";
         }
         else
         {
-            OSG_NOTIFY(WARN)<<"Warning: detected OpenGL error number 0x" << std::hex << errorNo << std::dec;
+            OSG_NOTIFY(notifyLevel)<<"Warning: detected OpenGL error number 0x" << std::hex << errorNo << std::dec;
         }
 
         if (str)
         {
-            OSG_NOTIFY(WARN)<<" at "<<str<< std::endl;
+            OSG_NOTIFY(notifyLevel)<<" at "<<str<< std::endl;
         }
         else
         {
-            OSG_NOTIFY(WARN)<<" in osg::State."<< std::endl;
+            OSG_NOTIFY(notifyLevel)<<" in osg::State."<< std::endl;
         }
 
         return true;
@@ -1405,6 +1460,18 @@ bool State::convertVertexShaderSourceToOsgBuiltIns(std::string& source) const
         declPos = 0;
     }
 
+    if (_useModelViewAndProjectionUniforms)
+    {
+        // replace ftransform as it only works with built-ins
+        State_Utils::replace(source, "ftransform()", "gl_ModelViewProjectionMatrix * gl_Vertex");
+
+        // replace built in uniform
+        State_Utils::replaceAndInsertDeclaration(source, declPos, "gl_ModelViewMatrix", "osg_ModelViewMatrix", "uniform mat4 ");
+        State_Utils::replaceAndInsertDeclaration(source, declPos, "gl_ModelViewProjectionMatrix", "osg_ModelViewProjectionMatrix", "uniform mat4 ");
+        State_Utils::replaceAndInsertDeclaration(source, declPos, "gl_ProjectionMatrix", "osg_ProjectionMatrix", "uniform mat4 ");
+        State_Utils::replaceAndInsertDeclaration(source, declPos, "gl_NormalMatrix", "osg_NormalMatrix", "uniform mat3 ");
+    }
+
     if (_useVertexAttributeAliasing)
     {
         State_Utils::replaceAndInsertDeclaration(source, declPos, _vertexAlias._glName,         _vertexAlias._osgName,         _vertexAlias._declaration);
@@ -1419,18 +1486,6 @@ bool State::convertVertexShaderSourceToOsgBuiltIns(std::string& source) const
         }
     }
 
-    if (_useModelViewAndProjectionUniforms)
-    {
-        // replace ftransform as it only works with built-ins
-        State_Utils::replace(source, "ftransform()", "gl_ModelViewProjectionMatrix * gl_Vertex");
-
-        // replace built in uniform
-        State_Utils::replaceAndInsertDeclaration(source, declPos, "gl_ModelViewMatrix", "osg_ModelViewMatrix", "uniform mat4 ");
-        State_Utils::replaceAndInsertDeclaration(source, declPos, "gl_ModelViewProjectionMatrix", "osg_ModelViewProjectionMatrix", "uniform mat4 ");
-        State_Utils::replaceAndInsertDeclaration(source, declPos, "gl_ProjectionMatrix", "osg_ProjectionMatrix", "uniform mat4 ");
-        State_Utils::replaceAndInsertDeclaration(source, declPos, "gl_NormalMatrix", "osg_NormalMatrix", "uniform mat3 ");
-    }
-
     OSG_INFO<<"-------- Converted source "<<std::endl<<source<<std::endl<<"----------------"<<std::endl;
 
     return true;
@@ -1440,6 +1495,7 @@ void State::setUpVertexAttribAlias(VertexAttribAlias& alias, GLuint location, co
 {
     alias = VertexAttribAlias(location, glName, osgName, declaration);
     _attributeBindingList[osgName] = location;
+    // OSG_NOTICE<<"State::setUpVertexAttribAlias("<<location<<" "<<glName<<" "<<osgName<<")"<<std::endl;
 }
 
 void State::applyProjectionMatrix(const osg::RefMatrix* matrix)
@@ -1748,12 +1804,99 @@ void State::print(std::ostream& fout) const
 
 void State::frameCompleted()
 {
-    osg::Drawable::Extensions* extensions = osg::Drawable::getExtensions(getContextID(), true);
-    if (extensions && getTimestampBits())
+    if (getTimestampBits())
     {
         GLint64 timestamp;
-        extensions->glGetInteger64v(GL_TIMESTAMP, &timestamp);
+        _glExtensions->glGetInteger64v(GL_TIMESTAMP, &timestamp);
         setGpuTimestamp(osg::Timer::instance()->tick(), timestamp);
         //OSG_NOTICE<<"State::frameCompleted() setting time stamp. timestamp="<<timestamp<<std::endl;
     }
+}
+
+bool State::DefineMap::updateCurrentDefines()
+{
+    if (changed)
+    {
+        currentDefines.clear();
+        for(DefineStackMap::const_iterator itr = map.begin();
+            itr != map.end();
+            ++itr)
+        {
+            const DefineStack::DefineVec& dv = itr->second.defineVec;
+            if (!dv.empty())
+            {
+                const StateSet::DefinePair& dp = dv.back();
+                if (dp.second & osg::StateAttribute::ON)
+                {
+                    currentDefines[itr->first] = dp;
+                }
+            }
+        }
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+std::string State::getDefineString(const osg::ShaderDefines& shaderDefines)
+{
+    if (_defineMap.changed) _defineMap.updateCurrentDefines();
+
+    const StateSet::DefineList& currentDefines = _defineMap.currentDefines;
+
+    ShaderDefines::const_iterator sd_itr = shaderDefines.begin();
+    StateSet::DefineList::const_iterator cd_itr = currentDefines.begin();
+
+    std::string shaderDefineStr;
+
+    while(sd_itr != shaderDefines.end() && cd_itr != currentDefines.end())
+    {
+        if ((*sd_itr) < cd_itr->first) ++sd_itr;
+        else if (cd_itr->first < (*sd_itr)) ++cd_itr;
+        else
+        {
+            const StateSet::DefinePair& dp = cd_itr->second;
+            shaderDefineStr += "#define ";
+            shaderDefineStr += cd_itr->first;
+            if (dp.first.empty())
+            {
+                shaderDefineStr += "\n";
+            }
+            else
+            {
+                shaderDefineStr += " ";
+                shaderDefineStr += dp.first;
+                shaderDefineStr += "\n";
+            }
+
+            ++sd_itr;
+            ++cd_itr;
+        }
+    }
+    return shaderDefineStr;
+}
+
+bool State::supportsShaderRequirements(const osg::ShaderDefines& shaderRequirements)
+{
+    if (shaderRequirements.empty()) return true;
+
+    if (_defineMap.changed) _defineMap.updateCurrentDefines();
+
+    const StateSet::DefineList& currentDefines = _defineMap.currentDefines;
+    for(ShaderDefines::const_iterator sr_itr = shaderRequirements.begin();
+        sr_itr != shaderRequirements.end();
+        ++sr_itr)
+    {
+        if (currentDefines.find(*sr_itr)==currentDefines.end()) return false;
+    }
+    return true;
+}
+
+bool State::supportsShaderRequirement(const std::string& shaderRequirement)
+{
+    if (_defineMap.changed) _defineMap.updateCurrentDefines();
+    const StateSet::DefineList& currentDefines = _defineMap.currentDefines;
+    return (currentDefines.find(shaderRequirement)!=currentDefines.end());
 }

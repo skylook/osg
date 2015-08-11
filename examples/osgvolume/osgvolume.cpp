@@ -306,6 +306,7 @@ class TestSupportOperation: public osg::GraphicsOperation
 public:
 
     TestSupportOperation():
+        osg::Referenced(true),
         osg::GraphicsOperation("TestSupportOperation",false),
         supported(true),
         errorMessage(),
@@ -1224,7 +1225,7 @@ int main( int argc, char **argv )
         // set the scene to render
         viewer.setSceneData(loadedModel.get());
 
-        // the the viewers main frame loop
+        // the viewers main frame loop
         viewer.run();
     }
 

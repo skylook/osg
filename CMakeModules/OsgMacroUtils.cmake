@@ -4,7 +4,7 @@
 #  full path of the library name. in order to differentiate release and debug, this macro get the
 #  NAME of the variables, so the macro gets as arguments the target name and the following list of parameters
 #  is intended as a list of variable names each one containing  the path of the libraries to link to
-#  The existance of a variable name with _DEBUG appended is tested and, in case it' s value is used
+#  The existence of a variable name with _DEBUG appended is tested and, in case it' s value is used
 #  for linking to when in debug mode
 #  the content of this library for linking when in debugging
 #######################################################################################################
@@ -216,9 +216,6 @@ MACRO(SETUP_LIBRARY LIB_NAME)
         INCLUDE_DIRECTORIES( ${GLCORE_INCLUDE_DIR} )
     ENDIF()
 
-    IF(ANDROID)
-        SETUP_ANDROID_LIBRARY(${LIB_NAME})
-    ELSE()
         SET(TARGET_NAME ${LIB_NAME} )
         SET(TARGET_TARGETNAME ${LIB_NAME} )
         ADD_LIBRARY(${LIB_NAME}
@@ -246,7 +243,6 @@ MACRO(SETUP_LIBRARY LIB_NAME)
         ENDIF(TARGET_LIBRARIES_VARS)
         LINK_CORELIB_DEFAULT(${LIB_NAME})
 
-    ENDIF()
     INCLUDE(ModuleInstall OPTIONAL)
 ENDMACRO(SETUP_LIBRARY LIB_NAME)
 
@@ -254,10 +250,6 @@ MACRO(SETUP_PLUGIN PLUGIN_NAME)
     IF(GLCORE_FOUND)
         INCLUDE_DIRECTORIES( ${GLCORE_INCLUDE_DIR} )
     ENDIF()
-
-    IF(ANDROID)
-        SETUP_ANDROID_LIBRARY(${TARGET_DEFAULT_PREFIX}${PLUGIN_NAME})
-    ELSE()
 
     SET(TARGET_NAME ${PLUGIN_NAME} )
 
@@ -340,7 +332,6 @@ MACRO(SETUP_PLUGIN PLUGIN_NAME)
             ARCHIVE DESTINATION lib${LIB_POSTFIX}/${OSG_PLUGINS} COMPONENT libopenscenegraph-dev
             LIBRARY DESTINATION lib${LIB_POSTFIX}/${OSG_PLUGINS} COMPONENT ${PACKAGE_COMPONENT})
     ENDIF(WIN32)
-    ENDIF()
 ENDMACRO(SETUP_PLUGIN)
 
 

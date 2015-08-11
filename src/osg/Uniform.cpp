@@ -45,10 +45,13 @@ Uniform::Uniform( Type type, const std::string& name, int numElements ) :
     allocateDataArray();
 }
 
-Uniform::Uniform( const Uniform& rhs, const CopyOp& copyop ) :
-    Object(rhs,copyop), _type(rhs._type)
+Uniform::Uniform(const Uniform& uniform, const CopyOp& copyop) :
+    Object(uniform, copyop),
+    _type(uniform._type),
+    _updateCallback(copyop(uniform._updateCallback.get())),
+    _eventCallback(copyop(uniform._eventCallback.get()))
 {
-    copyData( rhs );
+    copyData(uniform);
 }
 
 Uniform::~Uniform()
@@ -973,7 +976,7 @@ unsigned int Uniform::getNameID(const std::string& name)
     typedef std::map<std::string, unsigned int> UniformNameIDMap;
     static OpenThreads::Mutex s_mutex_uniformNameIDMap;
     static UniformNameIDMap s_uniformNameIDMap;
-    
+
     OpenThreads::ScopedLock<OpenThreads::Mutex> lock(s_mutex_uniformNameIDMap);
     UniformNameIDMap::iterator it = s_uniformNameIDMap.find(name);
     if (it != s_uniformNameIDMap.end())
@@ -985,7 +988,7 @@ unsigned int Uniform::getNameID(const std::string& name)
     return id;
 }
 
-// Use a proxy to force the initialization of the static variables in the Unifrom::getNameID() method during static initialization
+// Use a proxy to force the initialization of the static variables in the Uniform::getNameID() method during static initialization
 OSG_INIT_SINGLETON_PROXY(UniformNameIDStaticInitializationProxy, Uniform::getNameID(std::string()))
 
 
@@ -2456,7 +2459,7 @@ unsigned int Uniform::getNameID() const
 
 ///////////////////////////////////////////////////////////////////////////
 
-void Uniform::apply(const GL2Extensions* ext, GLint location) const
+void Uniform::apply(const GLExtensions* ext, GLint location) const
 {
     // OSG_NOTICE << "uniform at "<<location<<" "<<_name<< std::endl;
 
@@ -2607,7 +2610,7 @@ void Uniform::apply(const GL2Extensions* ext, GLint location) const
     }
 }
 
-void Uniform::setUpdateCallback(Callback* uc)
+void Uniform::setUpdateCallback(UniformCallback* uc)
 {
     OSG_INFO<<"Uniform::Setting Update callbacks"<<std::endl;
 
@@ -2633,7 +2636,7 @@ void Uniform::setUpdateCallback(Callback* uc)
     }
 }
 
-void Uniform::setEventCallback(Callback* ec)
+void Uniform::setEventCallback(UniformCallback* ec)
 {
     OSG_INFO<<"Uniform::Setting Event callbacks"<<std::endl;
 

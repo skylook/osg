@@ -44,7 +44,6 @@
 #include "broadcaster.h"
 
 
-const unsigned int MAX_NUM_EVENTS = 10;
 const unsigned int SWAP_BYTES_COMPARE = 0x12345678;
 class CameraPacket {
     public:
@@ -241,14 +240,14 @@ class DataConverter
         inline void writeFloat(float c)             { write4((char*)&c); }
         inline void writeDouble(double c)           { write8((char*)&c); }
 
-        inline char readChar() { char c; read1(&c); return c; }
-        inline unsigned char readUChar() { unsigned char c; read1((char*)&c); return c; }
-        inline short readShort() { short c; read2((char*)&c); return c; }
-        inline unsigned short readUShort() { unsigned short c; read2((char*)&c); return c; }
-        inline int readInt() { int c; read4((char*)&c); return c; }
-        inline unsigned int readUInt() { unsigned int c; read4((char*)&c); return c; }
-        inline float readFloat() { float c; read4((char*)&c); return c; }
-        inline double readDouble() { double c; read8((char*)&c); return c; }
+        inline char readChar() { char c=0; read1(&c); return c; }
+        inline unsigned char readUChar() { unsigned char c=0; read1((char*)&c); return c; }
+        inline short readShort() { short c=0; read2((char*)&c); return c; }
+        inline unsigned short readUShort() { unsigned short c=0; read2((char*)&c); return c; }
+        inline int readInt() { int c=0; read4((char*)&c); return c; }
+        inline unsigned int readUInt() { unsigned int c=0; read4((char*)&c); return c; }
+        inline float readFloat() { float c=0.0f; read4((char*)&c); return c; }
+        inline double readDouble() { double c=0.0; read8((char*)&c); return c; }
 
         void write(const osg::FrameStamp& fs)
         {
@@ -615,7 +614,7 @@ int main( int argc, char **argv )
 
         osg::notify(osg::INFO)<<"Time to do cluster sync "<<osg::Timer::instance()->delta_m(startTick,endTick)<<std::endl;
 
-        // update the scene by traversing it with the the update visitor which will
+        // update the scene by traversing it with the update visitor which will
         // call all node update callbacks and animations.
         viewer.eventTraversal();
         viewer.updateTraversal();

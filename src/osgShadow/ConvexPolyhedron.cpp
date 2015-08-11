@@ -77,9 +77,8 @@ using namespace osgShadow;
 const osg::Matrix & ConvexPolyhedron::defaultMatrix = *(osg::Matrix*)NULL;
 static const double epsi = pow( 2.0, -20.0 ); //circa 8 times float prec(~2^-23)
 static const double plane_hull_tolerance    = 1.0e-5;
-static const double point_plane_tolerance   = 0;
-static const double point_point_tolerance   = 0;
-static const double point_point_equivalence = 0;
+static const double point_plane_tolerance   = 0.0;
+static const double point_point_equivalence = 0.;
 
 // Tim Moore modifications for GCC 4.3 August 15, 2008
 // they correspond to Adrian Egli tweaks for VS 7.3 on August 19, 2008
@@ -88,7 +87,7 @@ namespace
 typedef std::vector< double > Distances;
 typedef std::vector< osg::Vec4d > Points;
 
-// Auxilliary params contined per face
+// Auxiliary params continued per face
 struct FaceDistances
 {
     ConvexPolyhedron::Faces::iterator itr;
@@ -1603,7 +1602,7 @@ void ConvexPolyhedron::extrude( const osg::Vec3d & offset )
             double dotOffset0 = edgeFaces[0]->plane.getNormal() * offset;
             double dotOffset1 = edgeFaces[1]->plane.getNormal() * offset;
 #endif
-            //Select orthogonal faces and vertices appropriate for offseting
+            //Select orthogonal faces and vertices appropriate for offsetting
             if( (dotOffset0 == 0.0 && dotOffset1 < 0.0) ||
                 (dotOffset1 == 0.0 && dotOffset0 < 0.0) )
             {

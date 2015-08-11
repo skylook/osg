@@ -31,6 +31,7 @@
 #include <map>
 #include <iostream>
 #include <sstream>
+#include <limits>
 #include <assert.h>
 
 using namespace std;
@@ -192,7 +193,7 @@ protected:
         StateSetInfo(const StateSetInfo & v) : stateset(v.stateset), lib3dsmat(v.lib3dsmat) {}
         StateSetInfo & operator=(const StateSetInfo & v) { stateset=v.stateset; lib3dsmat=v.lib3dsmat; return *this; }
 
-        osg::StateSet * stateset;
+        osg::ref_ptr<osg::StateSet> stateset;
         Lib3dsMaterial * lib3dsmat;
     };
 
@@ -412,7 +413,7 @@ void ReaderWriter3DS::ReaderObject::addDrawableFromFace(osg::Geode * geode, Face
             if (drawable.valid())
             {
                 if (ssi.stateset)
-                    drawable->setStateSet(ssi.stateset);
+                    drawable->setStateSet(ssi.stateset.get());
                 geode->addDrawable(drawable.get());
             }
         }
@@ -425,7 +426,7 @@ void ReaderWriter3DS::ReaderObject::addDrawableFromFace(osg::Geode * geode, Face
         if (drawable.valid())
         {
             if (ssi.stateset)
-                drawable->setStateSet(ssi.stateset);
+                drawable->setStateSet(ssi.stateset.get());
             geode->addDrawable(drawable.get());
         }
     }
@@ -508,7 +509,7 @@ osg::Node* ReaderWriter3DS::ReaderObject::processNode(StateSetMap& drawStateMap,
     Lib3dsMesh * mesh = lib3ds_file_mesh_for_node(f,node);
     assert(!(mesh && !object));        // Node must be a LIB3DS_NODE_MESH_INSTANCE if a mesh exists
 
-    // Retreive LOCAL transform
+    // Retrieve LOCAL transform
     static const osg::Matrix::value_type MATRIX_EPSILON = 1e-10;
     osg::Matrix osgWorldToNodeMatrix( copyLib3dsMatrixToOsgMatrix(node->matrix) );
     osg::Matrix osgWorldToParentNodeMatrix;
@@ -623,7 +624,7 @@ osg::Node* ReaderWriter3DS::ReaderObject::processNode(StateSetMap& drawStateMap,
         }
         else
         {
-            // didnt use group for children, return a ptr directly to the Geode for this mesh
+            // didn't use group for children, return a ptr directly to the Geode for this mesh
             // there is no group node but may have a meshTransform node to hold the meshes matrix
             if (meshTransform) {
                 processMesh(drawStateMap,meshTransform,mesh,meshAppliedMatPtr);
@@ -864,7 +865,7 @@ struct RemappedFace
 {
     Lib3dsFace* face;        // Original face definition.
     osg::Vec3f normal;
-    unsigned short index[3]; // Indices to OSG vertex/normal/texcoord arrays.
+    unsigned int index[3];   // Indices to OSG vertex/normal/texcoord arrays.
 };
 
 struct VertexParams
@@ -884,6 +885,14 @@ static bool isFaceValid(const Lib3dsMesh* mesh, const Lib3dsFace* face)
         face->index[2] < mesh->nvertices;
 }
 
+bool isNumber(float x)
+{
+    // This looks like it should always be true,
+    // but it's false if x is a NaN.
+    return (x == x);
+}
+
+
 /* ChrisD: addVertex handles the averaging of normals and spltting of vertices
    required to implement normals for smoothing groups. When a shared
    vertex is encountered when smoothing is required, normals are added
@@ -891,12 +900,12 @@ static bool isFaceValid(const Lib3dsMesh* mesh, const Lib3dsFace* face)
    not required, we must split the vertex if a different normal is required.
    For example if we are processing a cube mesh with no smoothing group
    made from 12 triangles and 8 vertices, the resultant mesh should have
-   24 vertices to accomodate the 3 different normals at each vertex.
+   24 vertices to accommodate the 3 different normals at each vertex.
   */
 static void addVertex(
     const Lib3dsMesh* mesh,
     RemappedFace& remappedFace,
-    unsigned short int i,
+    unsigned int i,
     osg::Geometry* geometry,
     std::vector<int>& origToNewMapping,
     std::vector<int>& splitVertexChain,
@@ -906,7 +915,7 @@ static void addVertex(
     osg::Vec3Array* normals = (osg::Vec3Array*)geometry->getNormalArray();
     osg::Vec2Array* texCoords = (osg::Vec2Array*)geometry->getTexCoordArray(0);
 
-    unsigned short int index = remappedFace.face->index[i];
+    unsigned int index = remappedFace.face->index[i];
     if (origToNewMapping[index] == -1)
     {
         int newIndex = vertices->size();
@@ -927,6 +936,10 @@ static void addVertex(
             osg::Vec2f texCoord(mesh->texcos[index][0], mesh->texcos[index][1]);
             texCoord = componentMultiply(texCoord, params.scaleUV);
             texCoord += params.offsetUV;
+            if (!isNumber(texCoord.x()) || !isNumber(texCoord.y())) {
+                OSG_WARN << "NaN found in texcoord" << std::endl;
+                texCoord.set(0,0);
+            }
             texCoords->push_back(texCoord);
         }
 
@@ -1003,6 +1016,25 @@ static bool addFace(
     }
 }
 
+template <typename Prim>
+void fillTriangles(osg::Geometry & geom, const std::vector<RemappedFace> & remappedFaces, unsigned int numIndices) {
+    //if (m->nvertices < std::numeric_limits<unsigned short>::max()) {
+    osg::ref_ptr<Prim> elements( new Prim(osg::PrimitiveSet::TRIANGLES, numIndices) );
+    typename Prim::iterator index_itr( elements->begin() );
+    for (unsigned int i = 0; i < remappedFaces.size(); ++i)
+    {
+        const RemappedFace& remappedFace = remappedFaces[i];
+        if (remappedFace.face != NULL)
+        {
+            *(index_itr++) = remappedFace.index[0];
+            *(index_itr++) = remappedFace.index[1];
+            *(index_itr++) = remappedFace.index[2];
+        }
+    }
+    geom.addPrimitiveSet(elements.get());
+}
+
+
 /**
 use matrix to pretransform geometry, or NULL to do nothing
 */
@@ -1059,21 +1091,27 @@ osg::Drawable* ReaderWriter3DS::ReaderObject::createDrawable(Lib3dsMesh *m,FaceL
 
     unsigned int faceIndex = 0;
     unsigned int faceCount = 0;
+    unsigned int maxVertexIndex = 0;
     for (FaceList::iterator itr = faceList.begin();
         itr != faceList.end();
         ++itr, ++faceIndex)
     {
-        osg::Vec3 normal = copyLib3dsVec3ToOsgVec3(normals[*itr]);
+        osg::Vec3f normal(copyLib3dsVec3ToOsgVec3(normals[*itr]));
         if (matrix) normal = osg::Matrix::transform3x3(normal, *(params.matrix));
         normal.normalize();
 
         Lib3dsFace& face = m->faces[*itr];
-        remappedFaces[faceIndex].face = &face;
-        remappedFaces[faceIndex].normal = normal;
-        if (addFace(m, remappedFaces[faceIndex], geom, origToNewMapping, splitVertexChain, params))
+        RemappedFace & rf = remappedFaces[faceIndex];
+        rf.face = &face;
+        rf.normal = normal;
+        if (addFace(m, rf, geom, origToNewMapping, splitVertexChain, params))
         {
             ++faceCount;
         }
+        // Get the highest index
+        maxVertexIndex = osg::maximum(maxVertexIndex, rf.index[0]);
+        maxVertexIndex = osg::maximum(maxVertexIndex, rf.index[1]);
+        maxVertexIndex = osg::maximum(maxVertexIndex, rf.index[2]);
     }
 
     // 'Shrink to fit' all vertex arrays because potentially faceList refers to fewer vertices than the whole mesh.
@@ -1088,23 +1126,12 @@ osg::Drawable* ReaderWriter3DS::ReaderObject::createDrawable(Lib3dsMesh *m,FaceL
     geom->setColorArray(osg_colors.get(), osg::Array::BIND_OVERALL);
 
     // Create triangle primitives.
-    int numIndices = faceCount * 3;
-    osg::ref_ptr<DrawElementsUShort> elements = new osg::DrawElementsUShort(osg::PrimitiveSet::TRIANGLES, numIndices);
-    DrawElementsUShort::iterator index_itr = elements->begin();
-
-    for (unsigned int i = 0; i < remappedFaces.size(); ++i)
-    {
-        RemappedFace& remappedFace = remappedFaces[i];
-        if (remappedFace.face != NULL)
-        {
-            *(index_itr++) = remappedFace.index[0];
-            *(index_itr++) = remappedFace.index[1];
-            *(index_itr++) = remappedFace.index[2];
-        }
-    }
-
-    geom->addPrimitiveSet(elements.get());
-
+    // Remapping may create additional vertices, thus creating indices over USHORT_MAX
+    if (maxVertexIndex < std::numeric_limits<unsigned short>::max()) {
+        fillTriangles<DrawElementsUShort>(*geom, remappedFaces, faceCount * 3);
+    } else {
+        fillTriangles<DrawElementsUInt>  (*geom, remappedFaces, faceCount * 3);
+   }
 #if 0
     osgUtil::TriStripVisitor tsv;
     tsv.stripify(*geom);
@@ -1178,7 +1205,7 @@ osg::Texture2D*  ReaderWriter3DS::ReaderObject::createTexture(Lib3dsTextureMap *
         osg_texture->setImage(osg_image.get());
         osg_texture->setName(texture->name);
         // does the texture support transparancy?
-        //transparency = ((texture->flags)&LIB3DS_TEXTURE_ALPHA_SOURCE)!=0;
+        transparency = ((texture->flags)&LIB3DS_TEXTURE_ALPHA_SOURCE)!=0;
 
         // what is the wrap mode of the texture.
         osg::Texture2D::WrapMode wm = ((texture->flags)&LIB3DS_TEXTURE_NO_TILE) ?
@@ -1221,6 +1248,24 @@ ReaderWriter3DS::StateSetInfo ReaderWriter3DS::ReaderObject::createStateSet(Lib3
     osg::Texture2D* texture1_map = createTexture(&(mat->texture1_map),"texture1_map",textureTransparency);
     if (texture1_map)
     {
+        if(textureTransparency) transparency = true;
+
+        // a diffuse texture can be transparent (e.g. a PNG with alpha channel)
+        if (texture1_map->getImage()->isImageTranslucent()) transparency = true;
+
+        // set UV scaling...
+        // to do: import offset and scaling
+        float uscale = mat->texture1_map.scale[0];
+        float vscale = mat->texture1_map.scale[1];
+        if (uscale != 1.0 || vscale != 1.0)
+        {
+            osg::ref_ptr<osg::TexMat> texmat = new osg::TexMat();
+            osg::Matrix uvScaling;
+            uvScaling.makeScale(osg::Vec3(uscale, vscale, 1.0));
+            texmat->setMatrix(uvScaling);
+            stateset->setTextureAttributeAndModes(unit, texmat.get(), osg::StateAttribute::ON);
+        }
+
         stateset->setTextureAttributeAndModes(unit, texture1_map, osg::StateAttribute::ON);
 
         double factor = mat->texture1_map.percent;
@@ -1266,28 +1311,92 @@ ReaderWriter3DS::StateSetInfo ReaderWriter3DS::ReaderObject::createStateSet(Lib3
     osg::Texture2D* opacity_map = createTexture(&(mat->opacity_map),"opacity_map", textureTransparency);
     if (opacity_map)
     {
-        if(opacity_map->getImage()->isImageTranslucent())
+        // set UV scaling...
+        // to do: import offset and scaling
+        float uscale = mat->opacity_map.scale[0];
+        float vscale = mat->opacity_map.scale[1];
+        if (uscale != 1.0 || vscale != 1.0)
         {
-            transparency = true;
-
-            stateset->setTextureAttributeAndModes(unit, opacity_map, osg::StateAttribute::ON);
-
-            double factor = mat->opacity_map.percent;
-
-                osg::TexEnvCombine* texenv = new osg::TexEnvCombine();
-                texenv->setCombine_Alpha(osg::TexEnvCombine::INTERPOLATE);
-                texenv->setSource0_Alpha(osg::TexEnvCombine::TEXTURE);
-                texenv->setSource1_Alpha(osg::TexEnvCombine::PREVIOUS);
-                texenv->setSource2_Alpha(osg::TexEnvCombine::CONSTANT);
-                texenv->setConstantColor(osg::Vec4(factor, factor, factor, 1.0 - factor));
-                stateset->setTextureAttributeAndModes(unit, texenv, osg::StateAttribute::ON);
-
-            unit++;
+            osg::ref_ptr<osg::TexMat> texmat = new osg::TexMat();
+            osg::Matrix uvScaling;
+            uvScaling.makeScale(osg::Vec3(uscale, vscale, 1.0));
+            texmat->setMatrix(uvScaling);
+            stateset->setTextureAttributeAndModes(unit, texmat.get(), osg::StateAttribute::ON);
         }
-        else
+
+        double factor = mat->opacity_map.percent;
+
+        // opacity map: add an alpha channel to the image to make opacity work
+        // (rebuid the image anyway if it must be rescaled according to factor)
+        if(!opacity_map->getImage()->isImageTranslucent() || factor<1.0)
         {
-            osg::notify(WARN)<<"The plugin does not support images without alpha channel for opacity"<<std::endl;
+            osg::notify(WARN)<<"Image without alpha channel for opacity. An extra alpha channel will be added."<<std::endl;
+            double one_minus_factor = 1.0 - factor;
+            osg::ref_ptr<osg::Image> osg_image = opacity_map->getImage();
+            int nc = (int)osg_image->getPixelSizeInBits()/8;
+            unsigned char* orig_img_data = (unsigned char*)osg_image->getDataPointer();
+            int n = osg_image->s()*osg_image->t()*4;
+            unsigned char* img_data = new unsigned char[n];
+            // rebuild the texture with alpha channel (rescale according to map amount)
+            for (int i=0, j=0; i<n; i+=4, j+=nc)
+            {
+                img_data[i] = img_data[i+1] = img_data[i+2] = img_data[i+3] = (unsigned char)(one_minus_factor + orig_img_data[j]*factor);
+            }
+            osg_image->setImage(osg_image->s(),osg_image->t(),osg_image->r(), GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE, img_data, osg::Image::USE_NEW_DELETE);
+            opacity_map->setImage(osg_image.get());
         }
+
+        transparency = true;
+
+        stateset->setTextureAttributeAndModes(unit, opacity_map, osg::StateAttribute::ON);
+
+        // set up and enable the texture combiner
+        osg::TexEnvCombine* texenv = new osg::TexEnvCombine();
+
+        texenv->setCombine_RGB(osg::TexEnvCombine::REPLACE);
+        texenv->setSource0_RGB(osg::TexEnvCombine::PREVIOUS);
+        texenv->setOperand0_RGB(osg::TexEnvCombine::SRC_COLOR);
+
+        texenv->setCombine_Alpha(osg::TexEnvCombine::MODULATE);
+        texenv->setSource0_Alpha(osg::TexEnvCombine::TEXTURE);
+        texenv->setOperand0_Alpha(osg::TexEnvCombine::SRC_ALPHA);
+        texenv->setSource1_Alpha(osg::TexEnvCombine::PRIMARY_COLOR);
+        texenv->setOperand1_Alpha(osg::TexEnvCombine::SRC_ALPHA);
+
+        stateset->setTextureAttributeAndModes(unit, texenv, osg::StateAttribute::ON);
+
+        osg::TexEnv* tenv = new osg::TexEnv();
+        tenv->setMode(osg::TexEnv::MODULATE);
+        stateset->setTextureAttributeAndModes(unit, tenv, osg::StateAttribute::ON);
+
+        unit++;
+    }
+
+    // derived from code in src/osgPlugins/fbx/fbxRMesh.cpp
+    osg::ref_ptr<osg::Texture> reflection_map = createTexture(&(mat->reflection_map),"reflection_map",textureTransparency);
+    if (reflection_map)
+    {
+        stateset->setTextureAttributeAndModes(unit, reflection_map.get(), osg::StateAttribute::ON);
+
+        // setup spherical map...
+        osg::ref_ptr<osg::TexGen> texgen = new osg::TexGen();
+        texgen->setMode(osg::TexGen::SPHERE_MAP);
+        stateset->setTextureAttributeAndModes(unit, texgen.get(), osg::StateAttribute::ON);
+
+        // setup combiner for factor...
+        double factor = mat->reflection_map.percent;
+        osg::ref_ptr<osg::TexEnvCombine> texenv = new osg::TexEnvCombine();
+        texenv->setCombine_RGB(osg::TexEnvCombine::INTERPOLATE);
+        texenv->setSource0_RGB(osg::TexEnvCombine::TEXTURE);
+        texenv->setSource1_RGB(osg::TexEnvCombine::PREVIOUS);
+        texenv->setSource2_RGB(osg::TexEnvCombine::CONSTANT);
+        texenv->setCombine_Alpha(osg::TexEnvCombine::REPLACE);
+        texenv->setSource0_Alpha(osg::TexEnvCombine::CONSTANT);
+        texenv->setOperand0_Alpha(osg::TexEnvCombine::SRC_ALPHA);
+        texenv->setConstantColor(osg::Vec4(factor, factor, factor, alpha));
+
+        stateset->setTextureAttributeAndModes(unit, texenv.get(), osg::StateAttribute::ON);
+        unit++;
     }
 
     // material
@@ -1301,7 +1410,7 @@ ReaderWriter3DS::StateSetInfo ReaderWriter3DS::ReaderObject::createStateSet(Lib3
 
     if ((alpha < 1.0f) || transparency)
     {
-        //stateset->setAttributeAndModes(new osg::BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
+        stateset->setAttributeAndModes(new osg::BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
         stateset->setMode(GL_BLEND,osg::StateAttribute::ON);
         stateset->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
     }
@@ -1309,7 +1418,7 @@ ReaderWriter3DS::StateSetInfo ReaderWriter3DS::ReaderObject::createStateSet(Lib3
     // Set back face culling state if single sided material applied.
     // This seems like a reasonable assumption given that the backface cull option
     // doesn't appear to be encoded directly in the 3DS format, and also because
-    // it mirrors the effect of code in 3DS writer which uses the the face culling
+    // it mirrors the effect of code in 3DS writer which uses the face culling
     // attribute to determine the state of the 'two_sided' 3DS material being written.
     if (!mat->two_sided)
     {

@@ -50,6 +50,7 @@ class TextureGLModeSet
             _textureModeSet.insert(GL_TEXTURE_1D);
             _textureModeSet.insert(GL_TEXTURE_2D);
             _textureModeSet.insert(GL_TEXTURE_3D);
+            _textureModeSet.insert(GL_TEXTURE_BUFFER);
 
             _textureModeSet.insert(GL_TEXTURE_CUBE_MAP);
             _textureModeSet.insert(GL_TEXTURE_RECTANGLE_NV);
@@ -176,6 +177,8 @@ StateSet::StateSet(const StateSet& rhs,const CopyOp& copyop):Object(rhs,copyop),
             uni->addParent(this);
         }
     }
+
+    _defineList = rhs._defineList;
 
     _renderingHint = rhs._renderingHint;
 
@@ -307,7 +310,11 @@ int StateSet::compare(const StateSet& rhs,bool compareAttributeContents) const
     if (_uniformList.size()<rhs._uniformList.size()) return -1;
     if (_uniformList.size()>rhs._uniformList.size()) return 1;
 
-     // check render bin details
+    if (_defineList.size()<rhs._defineList.size()) return -1;
+    if (_defineList.size()>rhs._defineList.size()) return 1;
+
+    
+    // check render bin details
 
     if ( _binMode < rhs._binMode ) return -1;
     else if ( _binMode > rhs._binMode ) return 1;
@@ -484,6 +491,28 @@ int StateSet::compare(const StateSet& rhs,bool compareAttributeContents) const
     }
     else if (rhs_uniform_itr == rhs._uniformList.end()) return 1;
 
+
+    // check defines.
+    DefineList::const_iterator lhs_define_itr = _defineList.begin();
+    DefineList::const_iterator rhs_define_itr = rhs._defineList.begin();
+    while (lhs_define_itr!=_defineList.end() && rhs_define_itr!=rhs._defineList.end())
+    {
+        if      (lhs_define_itr->first<rhs_define_itr->first) return -1;
+        else if (rhs_define_itr->first<lhs_define_itr->first) return 1;
+        if      (lhs_define_itr->second.first<rhs_define_itr->second.first) return -1;
+        else if (rhs_define_itr->second.first<lhs_define_itr->second.first) return 1;
+        if      (lhs_define_itr->second.second<rhs_define_itr->second.second) return -1;
+        else if (rhs_define_itr->second.second<lhs_define_itr->second.second) return 1;
+        ++lhs_define_itr;
+        ++rhs_define_itr;
+    }
+    if (lhs_define_itr==_defineList.end())
+    {
+        if (rhs_define_itr!=rhs._defineList.end()) return -1;
+    }
+    else if (rhs_define_itr == rhs._defineList.end()) return 1;
+
+    
     return 0;
 }
 
@@ -799,6 +828,32 @@ void StateSet::merge(const StateSet& rhs)
             _uniformList.insert(*rhs_uitr).first->second.first->addParent(this);
         }
     }
+
+    // merge the defines of rhs into this,
+    // this overrides rhs if OVERRIDE defined in this.
+    for(DefineList::const_iterator rhs_mitr = rhs._defineList.begin();
+        rhs_mitr != rhs._defineList.end();
+        ++rhs_mitr)
+    {
+        DefineList::iterator lhs_mitr = _defineList.find(rhs_mitr->first);
+        if (lhs_mitr!=_defineList.end())
+        {
+            // take the rhs mode unless the lhs is override and the rhs is not protected
+            if (!(lhs_mitr->second.second & StateAttribute::OVERRIDE ) ||
+                 (rhs_mitr->second.second & StateAttribute::PROTECTED))
+            {
+                // override isn't on in rhs, so override it with incoming
+                // value.
+                lhs_mitr->second = rhs_mitr->second;
+            }
+        }
+        else
+        {
+            // entry doesn't exist so insert it.
+            _defineList.insert(*rhs_mitr);
+        }
+    }
+
 
     // Merge RenderBin state from rhs into this.
     // Only do so if this's RenderBinMode is INHERIT.
@@ -1127,6 +1182,27 @@ const StateSet::RefUniformPair* StateSet::getUniformPair(const std::string& name
     if (itr!=_uniformList.end()) return &(itr->second);
     else return 0;
 }
+
+void StateSet::setDefine(const std::string& defineName, StateAttribute::OverrideValue value)
+{
+    DefinePair& dp = _defineList[defineName];
+    dp.first = "";
+    dp.second = value;
+}
+
+void StateSet::setDefine(const std::string& defineName, const std::string& defineValue, StateAttribute::OverrideValue value)
+{
+    DefinePair& dp = _defineList[defineName];
+    dp.first = defineValue;
+    dp.second = value;
+}
+
+void StateSet::removeDefine(const std::string& defineName)
+{
+    DefineList::iterator itr = _defineList.find(defineName);
+    if (itr != _defineList.end()) _defineList.erase(itr);
+}
+
 
 void StateSet::setTextureMode(unsigned int unit,StateAttribute::GLMode mode, StateAttribute::GLModeValue value)
 {
@@ -1730,7 +1806,7 @@ void StateSet::runUpdateCallbacks(osg::NodeVisitor* nv)
             uitr != _uniformList.end();
             ++uitr)
         {
-            Uniform::Callback* callback = uitr->second.first->getUpdateCallback();
+            UniformCallback* callback = uitr->second.first->getUpdateCallback();
             if (callback) (*callback)(uitr->second.first.get(),nv);
         }
     }
@@ -1793,7 +1869,7 @@ void StateSet::runEventCallbacks(osg::NodeVisitor* nv)
             uitr != _uniformList.end();
             ++uitr)
         {
-            Uniform::Callback* callback = uitr->second.first->getEventCallback();
+            UniformCallback* callback = uitr->second.first->getEventCallback();
             if (callback) (*callback)(uitr->second.first.get(),nv);
         }
     }

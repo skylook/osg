@@ -25,13 +25,8 @@ bool Callback::traverse(Object* object, Object* data)
     if (_nestedCallback.valid()) return _nestedCallback->run(object, data);
     else
     {
-#if 1
-        osg::Node* node = dynamic_cast<osg::Node*>(object);
-        osg::NodeVisitor* nv = dynamic_cast<osg::NodeVisitor*>(data);
-#else
-        osg::Node* node = object ? data->asNode() : 0;
+        osg::Node* node = object ? object->asNode() : 0;
         osg::NodeVisitor* nv = data ? data->asNodeVisitor() : 0;
-#endif
         if (node && nv)
         {
             nv->traverse(*node);
@@ -69,8 +64,9 @@ bool CallbackObject::run(osg::Object* object, osg::Parameters& inputParameters, 
 //
 bool NodeCallback::run(osg::Object* object, osg::Object* data)
 {
-    osg::Node* node = dynamic_cast<osg::Node*>(object);
-    osg::NodeVisitor* nv = dynamic_cast<osg::NodeVisitor*>(data);
+    osg::Node* node = object ? object->asNode() : 0;
+    osg::NodeVisitor* nv = data ? data->asNodeVisitor() : 0;
+
     if (node && nv)
     {
         operator()(node, nv);
@@ -95,11 +91,30 @@ void NodeCallback::operator()(Node* node, NodeVisitor* nv)
 //
 bool StateAttributeCallback::run(osg::Object* object, osg::Object* data)
 {
-    osg::StateAttribute* sa = dynamic_cast<osg::StateAttribute*>(object);
-    osg::NodeVisitor* nv = dynamic_cast<osg::NodeVisitor*>(data);
+    osg::StateAttribute* sa = object ? object->asStateAttribute() : 0;
+    osg::NodeVisitor* nv = data ? data->asNodeVisitor() : 0;
     if (sa && nv)
     {
         operator()(sa, nv);
+        return true;
+    }
+    else
+    {
+        return traverse(object, data);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+// UniformCallback
+//
+bool UniformCallback::run(osg::Object* object, osg::Object* data)
+{
+    osg::Uniform* uniform = object ? object->asUniform() : 0;
+    osg::NodeVisitor* nv = data ? data->asNodeVisitor() : 0;
+    if (uniform && nv)
+    {
+        operator()(uniform, nv);
         return true;
     }
     else

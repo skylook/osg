@@ -438,9 +438,9 @@ void Optimizer::StateVisitor::reset()
     _statesets.clear();
 }
 
-void Optimizer::StateVisitor::addStateSet(osg::StateSet* stateset,osg::Object* obj)
+void Optimizer::StateVisitor::addStateSet(osg::StateSet* stateset, osg::Node* node)
 {
-    _statesets[stateset].insert(obj);
+    _statesets[stateset].insert(node);
 }
 
 void Optimizer::StateVisitor::apply(osg::Node& node)
@@ -688,26 +688,13 @@ void Optimizer::StateVisitor::optimize()
             if (**current==**first_unique)
             {
                 OSG_INFO << "    found duplicate "<<(*current)->className()<<"  first="<<*first_unique<<"  current="<<*current<< std::endl;
-                ObjectSet& objSet = _statesets[*current];
-                for(ObjectSet::iterator sitr=objSet.begin();
-                    sitr!=objSet.end();
+                NodeSet& nodeSet = _statesets[*current];
+                for(NodeSet::iterator sitr=nodeSet.begin();
+                    sitr!=nodeSet.end();
                     ++sitr)
                 {
                     OSG_INFO << "       replace duplicate "<<*current<<" with "<<*first_unique<< std::endl;
-                    osg::Object* obj = *sitr;
-                    osg::Drawable* drawable = dynamic_cast<osg::Drawable*>(obj);
-                    if (drawable)
-                    {
-                        drawable->setStateSet(*first_unique);
-                    }
-                    else
-                    {
-                        osg::Node* node = dynamic_cast<osg::Node*>(obj);
-                        if (node)
-                        {
-                            node->setStateSet(*first_unique);
-                        }
-                    }
+                    (*sitr)->setStateSet(*first_unique);
                 }
             }
             else first_unique = current;
@@ -1099,13 +1086,7 @@ bool CollectLowestTransformsVisitor::removeTransforms(osg::Node* nodeWeCannotRem
         titr!=_transformMap.end();
         ++titr)
     {
-        if (titr->first==0)
-        {
-            OSG_NOTICE<<"Warning: CollectLowestTransformsVisitor::removeTransforms() error, encountered a NULL Transform pointer"<<std::endl;
-            break;
-        }
-
-        if (titr->second._canBeApplied)
+        if (titr->first!=0 && titr->second._canBeApplied)
         {
             if (titr->first!=nodeWeCannotRemove)
             {
@@ -1582,11 +1563,12 @@ void Optimizer::CombineLODsVisitor::apply(osg::LOD& lod)
     {
         for(unsigned int i=0;i<lod.getNumParents();++i)
         {
-            if (typeid(*lod.getParent(i))==typeid(osg::Group))
+            osg::Group* parent = lod.getParent(i);
+            if (typeid(*parent)==typeid(osg::Group))
             {
                 if (isOperationPermissibleForObject(&lod))
                 {
-                    _groupList.insert(lod.getParent(i)->asGroup());
+                    _groupList.insert(parent->asGroup());
                 }
             }
         }
@@ -4268,7 +4250,7 @@ void Optimizer::TextureAtlasVisitor::optimize()
                         }
                         else
                         {
-                            // if no texcoords then texgen must be being used, therefore must assume that texture is truely repeating
+                            // if no texcoords then texgen must be being used, therefore must assume that texture is truly repeating
                             s_outOfRange = true;
                             t_outOfRange = true;
                         }

@@ -18,7 +18,7 @@
 #include <osg/ClampColor>
 #include <osg/Fog>
 #include <osg/FragmentProgram>
-#include <osg/GL2Extensions>
+#include <osg/GLExtensions>
 #include <osg/PointSprite>
 #include <osg/StateSet>
 #include <osg/StencilTwoSided>
@@ -624,10 +624,17 @@ ObjectWrapperManager::ObjectWrapperManager()
     primitiveTable.add( "GL_QUADS", GL_QUADS );
     primitiveTable.add( "GL_QUAD_STRIP", GL_QUAD_STRIP );
     primitiveTable.add( "GL_POLYGON", GL_POLYGON );
+
     primitiveTable.add( "GL_LINES_ADJACENCY_EXT", GL_LINES_ADJACENCY_EXT );
     primitiveTable.add( "GL_LINE_STRIP_ADJACENCY_EXT", GL_LINE_STRIP_ADJACENCY_EXT );
     primitiveTable.add( "GL_TRIANGLES_ADJACENCY_EXT", GL_TRIANGLES_ADJACENCY_EXT );
     primitiveTable.add( "GL_TRIANGLE_STRIP_ADJACENCY_EXT", GL_TRIANGLE_STRIP_ADJACENCY_EXT );
+
+    primitiveTable.add( "GL_LINES_ADJACENCY", GL_LINES_ADJACENCY );
+    primitiveTable.add( "GL_LINE_STRIP_ADJACENCY", GL_LINE_STRIP_ADJACENCY );
+    primitiveTable.add( "GL_TRIANGLES_ADJACENCY", GL_TRIANGLES_ADJACENCY );
+    primitiveTable.add( "GL_TRIANGLE_STRIP_ADJACENCY", GL_TRIANGLE_STRIP_ADJACENCY );
+
     primitiveTable.add( "GL_PATCHES", GL_PATCHES );
 }
 
@@ -639,6 +646,8 @@ ObjectWrapperManager::~ObjectWrapperManager()
 void ObjectWrapperManager::addWrapper( ObjectWrapper* wrapper )
 {
     if ( !wrapper ) return;
+
+    OpenThreads::ScopedLock<OpenThreads::ReentrantMutex> lock(_wrapperMutex);
 
     WrapperMap::iterator itr = _wrappers.find( wrapper->getName() );
     if ( itr!=_wrappers.end() )
@@ -653,12 +662,16 @@ void ObjectWrapperManager::removeWrapper( ObjectWrapper* wrapper )
 {
     if ( !wrapper ) return;
 
+    OpenThreads::ScopedLock<OpenThreads::ReentrantMutex> lock(_wrapperMutex);
+
     WrapperMap::iterator itr = _wrappers.find( wrapper->getName() );
     if ( itr!=_wrappers.end() ) _wrappers.erase( itr );
 }
 
 ObjectWrapper* ObjectWrapperManager::findWrapper( const std::string& name )
 {
+    OpenThreads::ScopedLock<OpenThreads::ReentrantMutex> lock(_wrapperMutex);
+
     WrapperMap::iterator itr = _wrappers.find( name );
     if ( itr!=_wrappers.end() ) return itr->second.get();
 
@@ -687,6 +700,8 @@ void ObjectWrapperManager::addCompressor( BaseCompressor* compressor )
 {
     if ( !compressor ) return;
 
+    OpenThreads::ScopedLock<OpenThreads::ReentrantMutex> lock(_wrapperMutex);
+
     CompressorMap::iterator itr = _compressors.find( compressor->getName() );
     if ( itr!=_compressors.end() )
     {
@@ -700,12 +715,16 @@ void ObjectWrapperManager::removeCompressor( BaseCompressor* compressor )
 {
     if ( !compressor ) return;
 
+    OpenThreads::ScopedLock<OpenThreads::ReentrantMutex> lock(_wrapperMutex);
+
     CompressorMap::iterator itr = _compressors.find( compressor->getName() );
     if ( itr!=_compressors.end() ) _compressors.erase( itr );
 }
 
 BaseCompressor* ObjectWrapperManager::findCompressor( const std::string& name )
 {
+    OpenThreads::ScopedLock<OpenThreads::ReentrantMutex> lock(_wrapperMutex);
+
     CompressorMap::iterator itr = _compressors.find( name );
     if ( itr!=_compressors.end() ) return itr->second.get();
 

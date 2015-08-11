@@ -132,7 +132,7 @@ void EXTQuerySupport::endQuery(osg::State* /*state*/)
 
 void OpenGLQuerySupport::initialize(osg::State* state, osg::Timer_t /*startTick*/)
 {
-    _extensions = osg::Drawable::getExtensions(state->getContextID(),true);
+    _extensions = state->get<osg::GLExtensions>();
 }
 
 void EXTQuerySupport::initialize(osg::State* state, osg::Timer_t startTick)
@@ -352,6 +352,7 @@ static OpenThreads::ReentrantMutex s_drawSerializerMutex;
 //
 //  Renderer
 Renderer::Renderer(osg::Camera* camera):
+    osg::Referenced(true),
     osg::GraphicsOperation("Renderer",true),
     _camera(camera),
     _done(false),
@@ -464,10 +465,10 @@ void Renderer::initialize(osg::State* state)
     if (!_initialized)
     {
         _initialized = true;
-        osg::Drawable::Extensions* ext = osg::Drawable::getExtensions(state->getContextID(), true);
-        if (ext->isARBTimerQuerySupported() && state->getTimestampBits() > 0)
+        osg::GLExtensions* ext = state->get<osg::GLExtensions>();
+        if (ext->isARBTimerQuerySupported && state->getTimestampBits() > 0)
             _querySupport = new ARBQuerySupport();
-        else if (ext->isTimerQuerySupported())
+        else if (ext->isTimerQuerySupported)
             _querySupport = new EXTQuerySupport();
         if (_querySupport.valid())
             _querySupport->initialize(state, _startTick);

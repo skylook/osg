@@ -425,6 +425,8 @@ GLenum Image::computeFormatDataType(GLenum pixelFormat)
 {
     switch (pixelFormat)
     {
+        case GL_R32F:
+        case GL_RG32F:
         case GL_LUMINANCE32F_ARB:
         case GL_LUMINANCE16F_ARB:
         case GL_LUMINANCE_ALPHA32F_ARB:
@@ -466,6 +468,8 @@ GLenum Image::computeFormatDataType(GLenum pixelFormat)
 
         case GL_RGBA:
         case GL_RGB:
+        case GL_RED:
+        case GL_RG:
         case GL_LUMINANCE:
         case GL_LUMINANCE_ALPHA:
         case GL_ALPHA: return GL_UNSIGNED_BYTE;
@@ -525,6 +529,9 @@ unsigned int Image::computeNumComponents(GLenum pixelFormat)
         case(GL_ALPHA32UI_EXT): return 1;
         case(GL_ALPHA16F_ARB): return 1;
         case(GL_ALPHA32F_ARB): return 1;
+        case(GL_R32F): return 1;
+        case(GL_RG): return 2;
+        case(GL_RG32F): return 2;
         case(GL_RGB): return 3;
         case(GL_BGR): return 3;
         case(GL_RGB8I_EXT): return 3;
@@ -638,7 +645,7 @@ unsigned int Image::computePixelSizeInBits(GLenum format,GLenum type)
 
     // note, haven't yet added proper handling of the ARB GL_COMPRESSRED_* pathways
     // yet, no clear size for these since its probably implementation dependent
-    // which raises the question of how to actually querry for these sizes...
+    // which raises the question of how to actually query for these sizes...
     // will need to revisit this issue, for now just report an error.
     // this is possible a bit of mute point though as since the ARB compressed formats
     // arn't yet used for storing images to disk, so its likely that users wont have
@@ -833,7 +840,11 @@ int Image::computeNumberOfMipmapLevels(int s,int t, int r)
 {
     int w = maximum(s, t);
     w = maximum(w, r);
-    return 1 + static_cast<int>(floor(logf(w)/logf(2.0f)));
+
+    int n = 0;
+    while (w >>= 1)
+        ++n;
+    return n+1;
 }
 
 bool Image::isCompressed() const
@@ -1053,10 +1064,7 @@ void Image::readImageFromCurrentTexture(unsigned int contextID, bool copyMipMaps
 #if !defined(OSG_GLES1_AVAILABLE) && !defined(OSG_GLES2_AVAILABLE)
     // OSG_NOTICE<<"Image::readImageFromCurrentTexture()"<<std::endl;
 
-    const osg::Texture::Extensions* extensions = osg::Texture::getExtensions(contextID,true);
-    const osg::Texture3D::Extensions* extensions3D = osg::Texture3D::getExtensions(contextID,true);
-    const osg::Texture2DArray::Extensions* extensions2DArray = osg::Texture2DArray::getExtensions(contextID,true);
-
+    const osg::GLExtensions* extensions = osg::GLExtensions::Get(contextID,true);
 
     GLboolean binding1D = GL_FALSE, binding2D = GL_FALSE, binding3D = GL_FALSE, binding2DArray = GL_FALSE, bindingCubeMap = GL_FALSE;
 
@@ -1065,7 +1073,7 @@ void Image::readImageFromCurrentTexture(unsigned int contextID, bool copyMipMaps
     glGetBooleanv(GL_TEXTURE_BINDING_3D, &binding3D);
     glGetBooleanv(GL_TEXTURE_BINDING_CUBE_MAP, &bindingCubeMap);
 
-    if (extensions2DArray->isTexture2DArraySupported())
+    if (extensions->isTexture2DArraySupported)
     {
         glGetBooleanv(GL_TEXTURE_BINDING_2D_ARRAY_EXT, &binding2DArray);
     }
@@ -1136,14 +1144,21 @@ void Image::readImageFromCurrentTexture(unsigned int contextID, bool copyMipMaps
     }
     else if (textureMode==GL_TEXTURE_3D)
     {
-        if (extensions3D->isCompressedTexImage3DSupported())
+        if (extensions->isCompressedTexImage3DSupported())
         {
             glGetTexLevelParameteriv(textureMode, 0, GL_TEXTURE_COMPRESSED_ARB,&compressed);
         }
     }
     else if (textureMode==GL_TEXTURE_2D_ARRAY_EXT)
     {
-        if (extensions2DArray->isCompressedTexImage3DSupported())
+        if (extensions->isCompressedTexImage3DSupported())
+        {
+            glGetTexLevelParameteriv(textureMode, 0, GL_TEXTURE_COMPRESSED_ARB,&compressed);
+        }
+    }
+    else if(bindingCubeMap)
+    {
+        if (extensions->isCompressedTexImage2DSupported())
         {
             glGetTexLevelParameteriv(textureMode, 0, GL_TEXTURE_COMPRESSED_ARB,&compressed);
         }
@@ -1554,16 +1569,18 @@ void Image::flipVertical()
             {
                 if (!dxtc_tool::VerticalFlip(s,t,_pixelFormat,_data+_mipmapData[i]))
                 {
-                    OSG_NOTICE << "Notice Image::flipVertical(): Vertical flip do not succeed" << std::endl;
+                    OSG_NOTICE << "Notice Image::flipVertical(): Vertical flip did not succeed" << std::endl;
                 }
             }
             else
             {
-                // its not a compressed image, so implement flip oursleves.
+                // it's not a compressed image, so implement flip ourselves.
+                unsigned int mipRowSize = computeRowWidthInBytes(s, _pixelFormat, _dataType, _packing);
+                unsigned int mipRowStep = mipRowSize;
                 unsigned char* top = _data+_mipmapData[i];
-                unsigned char* bottom = top + (t-1)*rowStep;
+                unsigned char* bottom = top + (t-1)*mipRowStep;
 
-                flipImageVertical(top, bottom, rowSize, rowStep);
+                flipImageVertical(top, bottom, mipRowSize, mipRowStep);
             }
        }
     }
@@ -1919,11 +1936,56 @@ Vec4 Image::getColor(unsigned int s,unsigned t,unsigned r) const
 
 Vec4 Image::getColor(const Vec3& texcoord) const
 {
-    int s = int(texcoord.x()*float(_s-1)) % _s;
-    int t = int(texcoord.y()*float(_t-1)) % _t;
-    int r = int(texcoord.z()*float(_r-1)) % _r;
+    unsigned int s = osg::clampTo(int(texcoord.x()*float(_s-1)), 0, _s-1);
+    unsigned int t = osg::clampTo(int(texcoord.y()*float(_t-1)), 0, _t-1);
+    unsigned int r = osg::clampTo(int(texcoord.z()*float(_r-1)), 0, _r-1);
     //OSG_NOTICE<<"getColor("<<texcoord<<")="<<getColor(s,t,r)<<std::endl;
     return getColor(s,t,r);
+}
+
+
+template <typename T>
+void _writeColor(GLenum pixelFormat, T* data, float scale, const Vec4& c)
+{
+    switch(pixelFormat)
+    {
+    case(GL_DEPTH_COMPONENT):   //intentionally fall through and execute the code for GL_LUMINANCE
+    case(GL_LUMINANCE):         { (*data++) = (T)(c[0] * scale); } break;
+    case(GL_ALPHA):             { (*data++) = (T)(c[3] * scale); } break;
+    case(GL_LUMINANCE_ALPHA):   { (*data++) = (T)(c[0] * scale);  (*data++) = (T)(c[3] * scale); } break;
+    case(GL_RGB):               { (*data++) = (T)(c[0] *scale); (*data++) = (T)(c[1] *scale); (*data++) = (T)(c[2] *scale);} break;
+    case(GL_RGBA):              { (*data++) = (T)(c[0] *scale); (*data++) = (T)(c[1] *scale); (*data++) = (T)(c[2] *scale); (*data++) = (T)(c[3] *scale);} break;
+    case(GL_BGR):               { (*data++) = (T)(c[2] *scale); (*data++) = (T)(c[1] *scale); (*data++) = (T)(c[0] *scale);} break;
+    case(GL_BGRA):              { (*data++) = (T)(c[2] *scale); (*data++) = (T)(c[1] *scale); (*data++) = (T)(c[0] *scale); (*data++) = (T)(c[3] *scale);} break;
+    }
+
+}
+
+
+void Image::setColor( const Vec4& color, unsigned int s, unsigned int t/*=0*/, unsigned int r/*=0*/ )
+{
+    unsigned char* ptr = data(s,t,r);
+
+    switch(getDataType())
+    {
+    case(GL_BYTE):              return _writeColor(getPixelFormat(), (char*)ptr,             128.0f, color);
+    case(GL_UNSIGNED_BYTE):     return _writeColor(getPixelFormat(), (unsigned char*)ptr,    255.0f, color);
+    case(GL_SHORT):             return _writeColor(getPixelFormat(), (short*)ptr,            32768.0f, color);
+    case(GL_UNSIGNED_SHORT):    return _writeColor(getPixelFormat(), (unsigned short*)ptr,   65535.0f, color);
+    case(GL_INT):               return _writeColor(getPixelFormat(), (int*)ptr,              2147483648.0f, color);
+    case(GL_UNSIGNED_INT):      return _writeColor(getPixelFormat(), (unsigned int*)ptr,     4294967295.0f, color);
+    case(GL_FLOAT):             return _writeColor(getPixelFormat(), (float*)ptr,            1.0f, color);
+    case(GL_DOUBLE):            return _writeColor(getPixelFormat(), (double*)ptr,           1.0f, color);
+    }
+}
+
+void Image::setColor( const Vec4& color, const Vec3& texcoord )
+{
+    unsigned int s = osg::clampTo(int(texcoord.x()*float(_s-1)), 0, _s-1);
+    unsigned int t = osg::clampTo(int(texcoord.y()*float(_t-1)), 0, _t-1);
+    unsigned int r = osg::clampTo(int(texcoord.z()*float(_r-1)), 0, _r-1);
+
+    return setColor(color, s,t,r);
 }
 
 void Image::addDimensionsChangedCallback(DimensionsChangedCallback* cb)

@@ -86,9 +86,9 @@ public:
      // check if we need to do some depth buffer copying from a source FBO into the current FBO
      if (_source_fbo.get() != NULL)
      {
-         osg::FBOExtensions* fbo_ext = osg::FBOExtensions::instance(renderInfo.getContextID(),true);
-         bool fbo_supported = fbo_ext && fbo_ext->isSupported();
-         if (fbo_supported && fbo_ext->glBlitFramebuffer)
+         osg::GLExtensions* ext = renderInfo.getState()->get<osg::GLExtensions>();
+         bool fbo_supported = ext && ext->isFrameBufferObjectSupported;
+         if (fbo_supported && ext->glBlitFramebuffer)
          {
              // blit the depth buffer from the solid geometry fbo into the current transparency fbo
              (_fbo.get())->apply(*renderInfo.getState(), osg::FrameBufferObject::DRAW_FRAMEBUFFER);
@@ -96,7 +96,7 @@ public:
 
 //             glReadBuffer(GL_COLOR_ATTACHMENT0_EXT); // only needed to blit the color buffer
 //             glDrawBuffer(GL_COLOR_ATTACHMENT0_EXT); // only needed to blit the color buffer
-             fbo_ext->glBlitFramebuffer(
+             ext->glBlitFramebuffer(
                  0, 0, static_cast<GLint>(_width), static_cast<GLint>(_height),
                  0, 0, static_cast<GLint>(_width), static_cast<GLint>(_height),
 #ifdef USE_PACKED_DEPTH_STENCIL
@@ -130,17 +130,17 @@ public:
   {
     // only unbind the fbo if this is the last transparency pass
     if (_restore)
-      osg::FBOExtensions::instance( renderInfo.getState()->getContextID(), false )->glBindFramebuffer( GL_FRAMEBUFFER_EXT, 0 );
+    {
+        renderInfo.getState()->get<osg::GLExtensions>()->glBindFramebuffer( GL_FRAMEBUFFER_EXT, 0 );
+    }
   }
 protected:
   bool _restore;
 };
 
 
-DepthPeeling::CullCallback::CullCallback(unsigned int texUnit, unsigned int texWidth, unsigned int texHeight, unsigned int offsetValue) :
+DepthPeeling::CullCallback::CullCallback(unsigned int texUnit, unsigned int offsetValue) :
     _texUnit(texUnit),
-    _texWidth(texWidth),
-    _texHeight(texHeight),
     _offsetValue(offsetValue)
 {
 }
@@ -315,7 +315,7 @@ void DepthPeeling::createPeeling()
     // create some uniform and cull callback objects
     osg::Uniform *depthOff = new osg::Uniform("depthtest", (bool)false);
     osg::Uniform *depthOn  = new osg::Uniform("depthtest", (bool)true);
-    CullCallback *ccb      = new CullCallback(_texUnit, _texWidth, _texHeight, _offsetValue);
+    CullCallback *ccb      = new CullCallback(_texUnit, _offsetValue);
 
     // create a node for solid model rendering
     osg::Group *pre_solidNode = new osg::Group;
@@ -410,7 +410,7 @@ void DepthPeeling::createPeeling()
     _compositeCamera->setReferenceFrame(osg::Transform::ABSOLUTE_RF);
     _compositeCamera->setViewMatrix(osg::Matrix());
     _compositeCamera->setProjectionMatrix(osg::Matrix::ortho2D(0, 1, 0, 1));
-    _compositeCamera->setCullCallback(new CullCallback(0, _texWidth, _texHeight, 0));
+    _compositeCamera->setCullCallback(new CullCallback(0, 0));
     osg::StateSet* stateSet = _compositeCamera->getOrCreateStateSet();
     stateSet->setRenderBinDetails(100, "TraversalOrderBin", osg::StateSet::OVERRIDE_RENDERBIN_DETAILS);
     _root->addChild(_compositeCamera.get());

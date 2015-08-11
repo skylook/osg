@@ -21,6 +21,7 @@ Options::Options(const Options& options,const osg::CopyOp& copyop):
     _str(options._str),
     _databasePaths(options._databasePaths),
     _objectCacheHint(options._objectCacheHint),
+    _objectCache(options._objectCache),
     _precisionHint(options._precisionHint),
     _buildKdTreesHint(options._buildKdTreesHint),
     _pluginData(options._pluginData),
@@ -30,7 +31,8 @@ Options::Options(const Options& options,const osg::CopyOp& copyop):
     _writeFileCallback(options._writeFileCallback),
     _fileLocationCallback(options._fileLocationCallback),
     _fileCache(options._fileCache),
-    _terrain(options._terrain) {}
+    _terrain(options._terrain),
+    _parentGroup(options._parentGroup) {}
 
 void Options::parsePluginStringData(const std::string& str, char separator1, char separator2)
 {

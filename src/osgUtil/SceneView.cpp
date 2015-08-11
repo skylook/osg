@@ -50,24 +50,6 @@ static const GLubyte patternVertEven[] = {
     0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55,
     0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55};
 
-static const GLubyte patternVertOdd[] = {
-    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
-    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
-    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
-    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
-    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
-    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
-    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
-    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
-    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
-    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
-    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
-    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
-    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
-    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
-    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
-    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA};
-
 static const GLubyte patternHorzEven[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
     0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
@@ -597,15 +579,17 @@ void SceneView::computeRightEyeViewport(const osg::Viewport *viewport)
 void SceneView::setLightingMode(LightingMode mode)
 {
     if (mode==_lightingMode) return;
+    
+    osg::StateSet* stateSetToModify = _secondaryStateSet.valid() ? _secondaryStateSet.get() : _globalStateSet.get();
 
     if (_lightingMode!=NO_SCENEVIEW_LIGHT)
     {
         // remove GL_LIGHTING mode
-        _globalStateSet->removeMode(GL_LIGHTING);
+        stateSetToModify->removeMode(GL_LIGHTING);
 
         if (_light.valid())
         {
-            _globalStateSet->removeAssociatedModes(_light.get());
+            stateSetToModify->removeAssociatedModes(_light.get());
         }
 
     }
@@ -616,10 +600,10 @@ void SceneView::setLightingMode(LightingMode mode)
     {
         #if defined(OSG_GL_FIXED_FUNCTION_AVAILABLE)
             // add GL_LIGHTING mode
-            _globalStateSet->setMode(GL_LIGHTING, osg::StateAttribute::ON);
+            stateSetToModify->setMode(GL_LIGHTING, osg::StateAttribute::ON);
             if (_light.valid())
             {
-                _globalStateSet->setAssociatedModes(_light.get(), osg::StateAttribute::ON);
+                stateSetToModify->setAssociatedModes(_light.get(), osg::StateAttribute::ON);
             }
         #endif
     }
@@ -879,11 +863,11 @@ bool SceneView::cullStage(const osg::Matrixd& projection,const osg::Matrixd& mod
         {
         case(HEADLIGHT):
             if (_light.valid()) renderStage->addPositionedAttribute(NULL,_light.get());
-            else OSG_WARN<<"Warning: no osg::Light attached to ogUtil::SceneView to provide head light.*/"<<std::endl;
+            else OSG_WARN<<"Warning: no osg::Light attached to osgUtil::SceneView to provide head light.*/"<<std::endl;
             break;
         case(SKY_LIGHT):
             if (_light.valid()) renderStage->addPositionedAttribute(mv.get(),_light.get());
-            else OSG_WARN<<"Warning: no osg::Light attached to ogUtil::SceneView to provide sky light.*/"<<std::endl;
+            else OSG_WARN<<"Warning: no osg::Light attached to osgUtil::SceneView to provide sky light.*/"<<std::endl;
             break;
         default:
             break;
@@ -998,7 +982,7 @@ void SceneView::draw()
         flushDeletedGLObjects(availableTime);
     }
 
-    // assume the the draw which is about to happen could generate GL objects that need flushing in the next frame.
+    // assume the draw which is about to happen could generate GL objects that need flushing in the next frame.
     _requiresFlush = _automaticFlush;
 
     RenderLeaf* previous = NULL;
@@ -1146,14 +1130,15 @@ void SceneView::draw()
                 _renderStageRight->drawPreRenderStages(_renderInfo,previous);
 
                 double separation = _displaySettings->getSplitStereoHorizontalSeparation();
+                if (separation > 0.0)
+                {
+                    double  left_half_width = (getViewport()->width()-separation)/2.0;
 
-                double  left_half_width = (getViewport()->width()-separation)/2.0;
-
-                clearArea(static_cast<int>(getViewport()->x()+left_half_width),
-                          static_cast<int>(getViewport()->y()),
-                          static_cast<int>(separation),
-                          static_cast<int>(getViewport()->height()),_renderStageLeft->getClearColor());
-
+                    clearArea(static_cast<int>(getViewport()->x()+left_half_width),
+                              static_cast<int>(getViewport()->y()),
+                              static_cast<int>(separation),
+                              static_cast<int>(getViewport()->height()),_renderStageLeft->getClearColor());
+                }
 
                 _localStateSet->setAttribute(_viewportLeft.get());
                 _renderStageLeft->draw(_renderInfo,previous);
@@ -1196,14 +1181,16 @@ void SceneView::draw()
                 _renderStageRight->drawPreRenderStages(_renderInfo,previous);
 
                 double separation = _displaySettings->getSplitStereoVerticalSeparation();
+                if (separation > 0.0)
+                {
+                    double bottom_half_height = (getViewport()->height()-separation)/2.0;
 
-                double bottom_half_height = (getViewport()->height()-separation)/2.0;
-
-                clearArea(static_cast<int>(getViewport()->x()),
-                          static_cast<int>(getViewport()->y()+bottom_half_height),
-                          static_cast<int>(getViewport()->width()),
-                          static_cast<int>(separation),
-                          _renderStageLeft->getClearColor());
+                    clearArea(static_cast<int>(getViewport()->x()),
+                              static_cast<int>(getViewport()->y()+bottom_half_height),
+                              static_cast<int>(getViewport()->width()),
+                              static_cast<int>(separation),
+                              _renderStageLeft->getClearColor());
+                }
 
                 _localStateSet->setAttribute(_viewportLeft.get());
                 _renderStageLeft->draw(_renderInfo,previous);
@@ -1379,7 +1366,7 @@ void SceneView::draw()
         _renderStage->draw(_renderInfo,previous);
     }
 
-    // re apply the defalt OGL state.
+    // re apply the default OGL state.
     state->popAllStateSets();
     state->apply();
 
@@ -1459,7 +1446,7 @@ const osg::Matrix SceneView::computeMVPW() const
     if (getViewport())
         matrix.postMult(getViewport()->computeWindowMatrix());
     else
-        OSG_WARN<<"osg::Matrix SceneView::computeMVPW() - error no viewport attached to SceneView, coords will be computed inccorectly."<<std::endl;
+        OSG_WARN<<"osg::Matrix SceneView::computeMVPW() - error no viewport attached to SceneView, coords will be computed incorrectly."<<std::endl;
 
     return matrix;
 }

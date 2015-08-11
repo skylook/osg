@@ -316,7 +316,7 @@ public:
             {
                 // insert particle effects alongside the hit node, therefore able to track that nodes movement,
                 // however, this does require us to insert the ParticleSystem itself into the root of the scene graph
-                // separately from the the main particle effects group which contains the emitters and programs.
+                // separately from the main particle effects group which contains the emitters and programs.
                 // the follow code block implements this, note the path for handling particle effects which arn't attached to
                 // moving models is easy - just a single line of code!
 
@@ -340,10 +340,11 @@ public:
                     itr!=parents.end();
                     ++itr)
                 {
-                    if (typeid(*(*itr))==typeid(osg::Group))
+                    osg::Group* parent = (*itr);
+                    if (typeid(*parent)==typeid(osg::Group))
                     {
                         ++numGroupsFound;
-                        insertGroup = *itr;
+                        insertGroup = parent;
                     }
                 }
                 if (numGroupsFound==parents.size() && numGroupsFound==1 && insertGroup)

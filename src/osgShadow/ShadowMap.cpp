@@ -60,16 +60,6 @@ static const char fragmentShaderSource_withBaseTexture[] =
 //////////////////////////////////////////////////////////////////
 // fragment shader
 //
-static const char fragmentShaderSource_debugHUD_texcoord[] =
-    "uniform sampler2D osgShadow_shadowTexture; \n"
-    " \n"
-    "void main(void) \n"
-    "{ \n"
-    "   vec4 texCoord = gl_TexCoord[1].xyzw; \n"
-    "   float value = texCoord.z / texCoord.w; \n"
-    "   gl_FragColor = vec4( value, value, value, 1.0 ); \n"
-    "} \n";
-
 static const char fragmentShaderSource_debugHUD[] =
     "uniform sampler2D osgShadow_shadowTexture; \n"
     " \n"
@@ -296,7 +286,7 @@ void ShadowMap::init()
             //       not yet supported !
 
             osg::Image* image = new osg::Image;
-            // allocate the image data, noPixels x 1 x 1 with 4 rgba floats - equivilant to a Vec4!
+            // allocate the image data, noPixels x 1 x 1 with 4 rgba floats - equivalent to a Vec4!
             int noPixels = 1;
             image->allocateImage(noPixels,1,1,GL_RGBA,GL_FLOAT);
             image->setInternalTextureFormat(GL_RGBA);
@@ -337,7 +327,7 @@ void ShadowMap::cull(osgUtil::CullVisitor& cv)
 
     osgUtil::RenderStage* orig_rs = cv.getRenderStage();
 
-    // do traversal of shadow recieving scene which does need to be decorated by the shadow map
+    // do traversal of shadow receiving scene which does need to be decorated by the shadow map
     {
         cv.pushStateSet(_stateset.get());
 

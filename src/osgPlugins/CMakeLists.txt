@@ -186,6 +186,9 @@ ADD_SUBDIRECTORY(txf)
 ADD_SUBDIRECTORY(bsp)
 ADD_SUBDIRECTORY(mdl)
 
+ADD_SUBDIRECTORY(gles)
+ADD_SUBDIRECTORY(osgjs)
+
 IF(OSG_CPP_EXCEPTIONS_AVAILABLE)
     ADD_SUBDIRECTORY(lwo)
     ADD_SUBDIRECTORY(ply)
@@ -198,6 +201,10 @@ ENDIF()
 
 IF(FFMPEG_FOUND AND OSG_CPP_EXCEPTIONS_AVAILABLE)
     ADD_SUBDIRECTORY(ffmpeg)
+ENDIF()
+
+IF(GSTREAMER_FOUND AND GLIB_FOUND)
+    ADD_SUBDIRECTORY(gstreamer)
 ENDIF()
 
 IF(DIRECTSHOW_FOUND)
@@ -259,6 +266,10 @@ ADD_SUBDIRECTORY(osc)
 ADD_SUBDIRECTORY(trk)
 ADD_SUBDIRECTORY(tf)
 
+IF(Boost_INCLUDE_DIR AND LIBLAS_FOUND)
+    ADD_SUBDIRECTORY(las)
+ENDIF()
+
 
 ####################################################
 #
@@ -268,13 +279,15 @@ IF ((LUA_LIBRARIES AND LUA_INCLUDE_DIR) OR (LUA_SOURCE_DIR AND LUA_INCLUDE_DIR) 
     ADD_SUBDIRECTORY(lua)
 ENDIF()
 
-IF (V8_FOUND)
-    ADD_SUBDIRECTORY(V8)
-ENDIF()
 
-IF (PYTHONLIBS_FOUND)
-    ADD_SUBDIRECTORY(python)
-ENDIF()
+# V8 and Python plugins are tests for linking against these libraries but aren't functionality beyond this.
+# IF (V8_FOUND)
+#     ADD_SUBDIRECTORY(V8)
+# ENDIF()
+#
+# IF (PYTHONLIBS_FOUND)
+#     ADD_SUBDIRECTORY(python)
+# ENDIF()
 
 ####################################################
 #

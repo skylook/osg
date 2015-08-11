@@ -85,7 +85,7 @@ static int gluBuild3DMipmapLevelsCore(GLTexImage3DProc gluTexImage3D, GLenum, GL
 static GLfloat bytes_per_element(GLenum type);
 static GLint elements_per_group(GLenum format, GLenum type);
 static GLint is_index(GLenum format);
-static GLint image_size(GLint width, GLint height, GLenum format, GLenum type);
+static size_t image_size(GLint width, GLint height, GLenum format, GLenum type);
 static void fill_image(const PixelStorageModes *,
                        GLint width, GLint height, GLenum format,
                        GLenum type, GLboolean index_format,
@@ -3599,7 +3599,7 @@ int gluBuild1DMipmapLevelsCore(GLenum target, GLint internalFormat,
     GLint newImage_width;
     GLushort *otherImage;
     GLushort *imageTemp;
-    GLint memreq;
+    size_t memreq;
     GLint cmpts;
     PixelStorageModes psm;
 
@@ -3752,7 +3752,7 @@ static int bitmapBuild2DMipmaps(GLenum target, GLint internalFormat,
     GLint newImage_height;
     GLushort *otherImage;
     GLushort *imageTemp;
-    GLint memreq;
+    size_t memreq;
     GLint cmpts;
     PixelStorageModes psm;
 
@@ -3868,7 +3868,7 @@ static int gluBuild2DMipmapLevelsCore(GLenum target, GLint internalFormat,
     const void *usersImage; /* passed from user. Don't touch! */
     void *srcImage, *dstImage; /* scratch area to build mipmapped images */
     __GLU_INIT_SWAP_IMAGE;
-    GLint memreq;
+    size_t memreq;
     GLint cmpts;
 
     GLint myswap_bytes, groups_per_line, element_size, group_size;
@@ -4710,7 +4710,7 @@ static int fastBuild2DMipmaps(const PixelStorageModes *psm,
     GLint newImage_height;
     GLubyte *otherImage;
     GLubyte *imageTemp;
-    GLint memreq;
+    size_t memreq;
     GLint cmpts;
 
 
@@ -4933,10 +4933,10 @@ static GLint is_index(GLenum format)
 ** Compute memory required for internal packed array of data of given type
 ** and format.
 */
-static GLint image_size(GLint width, GLint height, GLenum format, GLenum type)
+static size_t image_size(GLint width, GLint height, GLenum format, GLenum type)
 {
-    int bytes_per_row;
-    int components;
+    size_t bytes_per_row;
+    size_t components;
 
 assert(width > 0);
 assert(height > 0);
@@ -4944,7 +4944,7 @@ assert(height > 0);
     if (type == GL_BITMAP) {
         bytes_per_row = (width + 7) / 8;
     } else {
-        bytes_per_row = GLint(bytes_per_element(type) * width);
+        bytes_per_row = size_t(bytes_per_element(type) * width);
     }
     return bytes_per_row * height * components;
 }
@@ -5557,12 +5557,10 @@ static void empty_image(const PixelStorageModes *psm,
  * Decimation of packed pixel types
  *--------------------------------------------------------------------------
  */
-static void extract332(int isSwap,
+static void extract332(int /*isSwap*/,
                        const void *packedPixel, GLfloat extractComponents[])
 {
    GLubyte ubyte= *(const GLubyte *)packedPixel;
-
-   isSwap= isSwap;                /* turn off warnings */
 
    /* 11100000 == 0xe0 */
    /* 00011100 == 0x1c */
@@ -5593,12 +5591,10 @@ static void shove332(const GLfloat shoveComponents[],
      ((GLubyte)((shoveComponents[2] * 3)+0.5)           ) & 0x03;
 } /* shove332() */
 
-static void extract233rev(int isSwap,
+static void extract233rev(int /*isSwap*/,
                           const void *packedPixel, GLfloat extractComponents[])
 {
    GLubyte ubyte= *(const GLubyte *)packedPixel;
-
-   isSwap= isSwap;                /* turn off warnings */
 
    /* 0000,0111 == 0x07 */
    /* 0011,1000 == 0x38 */
@@ -8559,10 +8555,8 @@ GLint GLAPIENTRY gluBuild3DMipmaps(GLTexImage3DProc gluTexImage3D,
                                      data);
 } /* gluBuild3DMipmaps() */
 
-static GLdouble extractUbyte(int isSwap, const void *ubyte)
+static GLdouble extractUbyte(int /*isSwap*/, const void *ubyte)
 {
-   isSwap= isSwap;                /* turn off warnings */
-
    return (GLdouble)(*((const GLubyte *)ubyte));
 } /* extractUbyte() */
 
@@ -8573,10 +8567,8 @@ static void shoveUbyte(GLdouble value, int index, void *data)
    ((GLubyte *)data)[index]= (GLubyte)value;
 } /* shoveUbyte() */
 
-static GLdouble extractSbyte(int isSwap, const void *sbyte)
+static GLdouble extractSbyte(int /*isSwap*/, const void *sbyte)
 {
-   isSwap= isSwap;                /* turn off warnings */
-
    return (GLdouble)(*((const GLbyte *)sbyte));
 } /* extractSbyte() */
 

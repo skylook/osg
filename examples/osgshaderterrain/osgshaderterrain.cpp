@@ -22,7 +22,7 @@
 #include <osg/Depth>
 #include <osg/Geode>
 #include <osg/Geometry>
-#include <osg/GL2Extensions>
+#include <osg/GLExtensions>
 #include <osg/Material>
 #include <osg/Math>
 #include <osg/MatrixTransform>
@@ -261,6 +261,7 @@ class TestSupportOperation: public osg::GraphicsOperation
 public:
 
     TestSupportOperation():
+        osg::Referenced(true),
         osg::GraphicsOperation("TestSupportOperation",false),
         _supported(true),
         _errorMessage() {}
@@ -269,11 +270,11 @@ public:
     {
         OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_mutex);
 
-        unsigned int contextID = gc->getState()->getContextID();
-        osg::GL2Extensions* gl2ext = osg::GL2Extensions::Get(contextID,true);
+
+        osg::GLExtensions* gl2ext = gc->getState()->get<osg::GLExtensions>();
         if( gl2ext )
         {
-            if( !gl2ext->isGlslSupported() )
+            if( !gl2ext->isGlslSupported )
             {
                 _supported = false;
                 _errorMessage = "ERROR: GLSL not supported by OpenGL driver.";

@@ -1164,7 +1164,7 @@ void ViewDependentShadowMap::createShaders()
 
     unsigned int _baseTextureUnit = 0;
 
-    OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_accessUnfiromsAndProgramMutex);
+    OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_accessUniformsAndProgramMutex);
 
     _shadowCastingStateSet = new osg::StateSet;
 
@@ -2145,7 +2145,7 @@ bool ViewDependentShadowMap::adjustPerspectiveShadowMapCameraSettings(osgUtil::R
     double gamma_v = acos(dotProduct_v);
     if (gamma_v<osg::DegreesToRadians(settings->getPerspectiveShadowMapCutOffAngle()) || gamma_v>osg::DegreesToRadians(180-settings->getPerspectiveShadowMapCutOffAngle()))
     {
-        // OSG_NOTICE<<"Light and view vectors near parrallel - use standard shadow map."<<std::endl;
+        // OSG_NOTICE<<"Light and view vectors near parallel - use standard shadow map."<<std::endl;
         return true;
     }
 
@@ -2346,7 +2346,7 @@ osg::StateSet* ViewDependentShadowMap::selectStateSetForRenderingShadow(ViewDepe
 
     osg::ref_ptr<osg::StateSet> stateset = vdd.getStateSet();
 
-    OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_accessUnfiromsAndProgramMutex);
+    OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_accessUniformsAndProgramMutex);
 
     vdd.getStateSet()->clear();
 

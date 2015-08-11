@@ -62,9 +62,6 @@ namespace osg {
 ApplicationUsageProxy Texture_e0(ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_MAX_TEXTURE_SIZE","Set the maximum size of textures.");
 ApplicationUsageProxy Texture_e1(ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_GL_TEXTURE_STORAGE","ON|OFF or ENABLE|DISABLE, Enables/disables usage of glTexStorage for textures where supported, default is ENABLED.");
 
-typedef buffered_value< ref_ptr<Texture::Extensions> > BufferedExtensions;
-static BufferedExtensions s_extensions;
-
 struct InternalPixelRelations
 {
     GLenum sizedInternalFormat;
@@ -204,12 +201,10 @@ bool isSizedInternalFormat(GLint internalFormat)
 {
     const size_t formatsCount = sizeof(sizedInternalFormats) / sizeof(sizedInternalFormats[0]);
 
-    size_t i = 0;
-    while(i < formatsCount)
+    for (size_t i=0; i < formatsCount; ++i)
     {
         if((GLenum)internalFormat == sizedInternalFormats[i].sizedInternalFormat)
             return true;
-        ++i;
     }
 
     return false;
@@ -219,12 +214,10 @@ GLenum assumeSizedInternalFormat(GLint internalFormat, GLenum type)
 {
     const size_t formatsCount = sizeof(sizedInternalFormats) / sizeof(sizedInternalFormats[0]);
 
-    size_t i = formatsCount;
-    while(i >= 0)
+    for (size_t i=0; i < formatsCount; ++i)
     {
         if(internalFormat == sizedInternalFormats[i].internalFormat && type == sizedInternalFormats[i].type)
             return sizedInternalFormats[i].sizedInternalFormat;
-        --i;
     }
 
     return 0;
@@ -234,12 +227,10 @@ bool isCompressedInternalFormatSupportedByTexStorrage(GLint internalFormat)
 {
     const size_t formatsCount = sizeof(compressedInternalFormats) / sizeof(compressedInternalFormats[0]);
 
-    size_t i = 0;
-    while(i < formatsCount)
+    for (size_t i=0; i < formatsCount; ++i)
     {
         if((GLenum)internalFormat == compressedInternalFormats[i].sizedInternalFormat)
             return true;
-        ++i;
     }
 
     return false;
@@ -588,7 +579,7 @@ void Texture::TextureObjectSet::discardAllDeletedTextureObjects()
     // update the TextureObjectManager's running total of current pool size
     _parent->getCurrTexturePoolSize() -= numDiscarded*_profile._size;
 
-    // update the number of active and orphaned TextureOjects
+    // update the number of active and orphaned TextureObjects
     _parent->getNumberOrphanedTextureObjects() -= numDiscarded;
     _parent->getNumberDeleted() += numDiscarded;
 
@@ -632,7 +623,7 @@ void Texture::TextureObjectSet::flushDeletedTextureObjects(double /*currentTime*
         _orphanedTextureObjects.size();
 
     OSG_INFO<<"_parent->getCurrTexturePoolSize()="<<_parent->getCurrTexturePoolSize() <<" _parent->getMaxTexturePoolSize()="<< _parent->getMaxTexturePoolSize()<<std::endl;
-    OSG_INFO<<"Looking to reclaim "<<sizeRequired<<", going to look to remove "<<maxNumObjectsToDelete<<" from "<<_orphanedTextureObjects.size()<<" orhpans"<<std::endl;
+    OSG_INFO<<"Looking to reclaim "<<sizeRequired<<", going to look to remove "<<maxNumObjectsToDelete<<" from "<<_orphanedTextureObjects.size()<<" orphans"<<std::endl;
 
     ElapsedTime timer;
 
@@ -659,7 +650,7 @@ void Texture::TextureObjectSet::flushDeletedTextureObjects(double /*currentTime*
 
     _parent->getCurrTexturePoolSize() -= numDeleted*_profile._size;
 
-    // update the number of active and orphaned TextureOjects
+    // update the number of active and orphaned TextureObjects
     _parent->getNumberOrphanedTextureObjects() -= numDeleted;
     _parent->getNumberDeleted() += numDeleted;
 
@@ -689,7 +680,7 @@ bool Texture::TextureObjectSet::makeSpace(unsigned int& size)
     return size==0;
 }
 
-Texture::TextureObject* Texture::TextureObjectSet::takeFromOrphans(Texture* texture)
+osg::ref_ptr<Texture::TextureObject> Texture::TextureObjectSet::takeFromOrphans(Texture* texture)
 {
     // take front of orphaned list.
     ref_ptr<TextureObject> to = _orphanedTextureObjects.front();
@@ -700,7 +691,7 @@ Texture::TextureObject* Texture::TextureObjectSet::takeFromOrphans(Texture* text
     // assign to new texture
     to->setTexture(texture);
 
-    // update the number of active and orphaned TextureOjects
+    // update the number of active and orphaned TextureObjects
     _parent->getNumberOrphanedTextureObjects() -= 1;
     _parent->getNumberActiveTextureObjects() += 1;
 
@@ -709,11 +700,11 @@ Texture::TextureObject* Texture::TextureObjectSet::takeFromOrphans(Texture* text
 
     OSG_INFO<<"Reusing orphaned TextureObject, _numOfTextureObjects="<<_numOfTextureObjects<<std::endl;
 
-    return to.release();
+    return to;
 }
 
 
-Texture::TextureObject* Texture::TextureObjectSet::takeOrGenerate(Texture* texture)
+osg::ref_ptr<Texture::TextureObject> Texture::TextureObjectSet::takeOrGenerate(Texture* texture)
 {
     // see if we can recyle TextureObject from the orphan list
     {
@@ -761,7 +752,7 @@ Texture::TextureObject* Texture::TextureObjectSet::takeOrGenerate(Texture* textu
         // assign to new texture
         to->setTexture(texture);
 
-        return to.release();
+        return to;
     }
 
     //
@@ -770,7 +761,7 @@ Texture::TextureObject* Texture::TextureObjectSet::takeOrGenerate(Texture* textu
     GLuint id;
     glGenTextures( 1L, &id );
 
-    TextureObject* to = new Texture::TextureObject(const_cast<Texture*>(texture),id,_profile);
+    osg::ref_ptr<TextureObject> to = new Texture::TextureObject(const_cast<Texture*>(texture),id,_profile);
     to->_set = this;
     ++_numOfTextureObjects;
 
@@ -778,7 +769,7 @@ Texture::TextureObject* Texture::TextureObjectSet::takeOrGenerate(Texture* textu
     _parent->getCurrTexturePoolSize() += _profile._size;
     _parent->getNumberActiveTextureObjects() += 1;
 
-    addToBack(to);
+    addToBack(to.get());
 
     OSG_INFO<<"Created new " << this << " TextureObject, _numOfTextureObjects "<<_numOfTextureObjects<<std::endl;
 
@@ -999,12 +990,12 @@ bool Texture::TextureObjectManager::makeSpace(unsigned int size)
 }
 
 
-Texture::TextureObject* Texture::TextureObjectManager::generateTextureObject(const Texture* texture, GLenum target)
+osg::ref_ptr<Texture::TextureObject> Texture::TextureObjectManager::generateTextureObject(const Texture* texture, GLenum target)
 {
     return generateTextureObject(texture, target, 0, 0, 0, 0, 0, 0);
 }
 
-Texture::TextureObject* Texture::TextureObjectManager::generateTextureObject(const Texture* texture,
+osg::ref_ptr<Texture::TextureObject> Texture::TextureObjectManager::generateTextureObject(const Texture* texture,
                                              GLenum    target,
                                              GLint     numMipmapLevels,
                                              GLenum    internalFormat,
@@ -1019,6 +1010,26 @@ Texture::TextureObject* Texture::TextureObjectManager::generateTextureObject(con
     Texture::TextureProfile profile(target,numMipmapLevels,internalFormat,width,height,depth,border);
     TextureObjectSet* tos = getTextureObjectSet(profile);
     return tos->takeOrGenerate(const_cast<Texture*>(texture));
+}
+
+Texture::TextureObject* Texture::generateAndAssignTextureObject(unsigned int contextID, GLenum target) const
+{
+    _textureObjectBuffer[contextID] = generateTextureObject(this, contextID, target);
+    return _textureObjectBuffer[contextID].get();
+}
+
+Texture::TextureObject* Texture::generateAndAssignTextureObject(
+                                             unsigned int contextID,
+                                             GLenum    target,
+                                             GLint     numMipmapLevels,
+                                             GLenum    internalFormat,
+                                             GLsizei   width,
+                                             GLsizei   height,
+                                             GLsizei   depth,
+                                             GLint     border) const
+{
+    _textureObjectBuffer[contextID] = generateTextureObject(this, contextID, target, numMipmapLevels, internalFormat, width, height, depth, border);
+    return _textureObjectBuffer[contextID].get();
 }
 
 Texture::TextureObjectSet* Texture::TextureObjectManager::getTextureObjectSet(const TextureProfile& profile)
@@ -1212,12 +1223,12 @@ osg::ref_ptr<Texture::TextureObjectManager>& Texture::getTextureObjectManager(un
 }
 
 
-Texture::TextureObject* Texture::generateTextureObject(const Texture* texture, unsigned int contextID, GLenum target)
+osg::ref_ptr<Texture::TextureObject> Texture::generateTextureObject(const Texture* texture, unsigned int contextID, GLenum target)
 {
     return getTextureObjectManager(contextID)->generateTextureObject(texture, target);
 }
 
-Texture::TextureObject* Texture::generateTextureObject(const Texture* texture, unsigned int contextID,
+osg::ref_ptr<Texture::TextureObject> Texture::generateTextureObject(const Texture* texture, unsigned int contextID,
                                              GLenum    target,
                                              GLint     numMipmapLevels,
                                              GLenum    internalFormat,
@@ -1474,12 +1485,12 @@ void Texture::computeInternalFormatWithImage(const osg::Image& image) const
     {
 
         const unsigned int contextID = 0; // state.getContextID();  // set to 0 right now, assume same parameters for each graphics context...
-        const Extensions* extensions = getExtensions(contextID,true);
+        const GLExtensions* extensions = GLExtensions::Get(contextID,true);
 
         switch(_internalFormatMode)
         {
         case(USE_ARB_COMPRESSION):
-            if (extensions->isTextureCompressionARBSupported())
+            if (extensions->isTextureCompressionARBSupported)
             {
                 switch(image.getPixelFormat())
                 {
@@ -1498,7 +1509,7 @@ void Texture::computeInternalFormatWithImage(const osg::Image& image) const
             break;
 
         case(USE_S3TC_DXT1_COMPRESSION):
-            if (extensions->isTextureCompressionS3TCSupported())
+            if (extensions->isTextureCompressionS3TCSupported)
             {
                 switch(image.getPixelFormat())
                 {
@@ -1512,7 +1523,7 @@ void Texture::computeInternalFormatWithImage(const osg::Image& image) const
             break;
 
         case(USE_S3TC_DXT1c_COMPRESSION):
-            if (extensions->isTextureCompressionS3TCSupported())
+            if (extensions->isTextureCompressionS3TCSupported)
             {
                 switch(image.getPixelFormat())
                 {
@@ -1526,7 +1537,7 @@ void Texture::computeInternalFormatWithImage(const osg::Image& image) const
             break;
 
         case(USE_S3TC_DXT1a_COMPRESSION):
-            if (extensions->isTextureCompressionS3TCSupported())
+            if (extensions->isTextureCompressionS3TCSupported)
             {
                 switch(image.getPixelFormat())
                 {
@@ -1540,7 +1551,7 @@ void Texture::computeInternalFormatWithImage(const osg::Image& image) const
             break;
 
         case(USE_S3TC_DXT3_COMPRESSION):
-            if (extensions->isTextureCompressionS3TCSupported())
+            if (extensions->isTextureCompressionS3TCSupported)
             {
                 switch(image.getPixelFormat())
                 {
@@ -1554,7 +1565,7 @@ void Texture::computeInternalFormatWithImage(const osg::Image& image) const
             break;
 
         case(USE_S3TC_DXT5_COMPRESSION):
-            if (extensions->isTextureCompressionS3TCSupported())
+            if (extensions->isTextureCompressionS3TCSupported)
             {
                 switch(image.getPixelFormat())
                 {
@@ -1568,7 +1579,7 @@ void Texture::computeInternalFormatWithImage(const osg::Image& image) const
             break;
 
         case(USE_PVRTC_2BPP_COMPRESSION):
-            if (extensions->isTextureCompressionPVRTC2BPPSupported())
+            if (extensions->isTextureCompressionPVRTC2BPPSupported)
             {
                 switch(image.getPixelFormat())
                 {
@@ -1582,7 +1593,7 @@ void Texture::computeInternalFormatWithImage(const osg::Image& image) const
             break;
 
         case(USE_PVRTC_4BPP_COMPRESSION):
-            if (extensions->isTextureCompressionPVRTC4BPPSupported())
+            if (extensions->isTextureCompressionPVRTC4BPPSupported)
             {
                 switch(image.getPixelFormat())
                 {
@@ -1596,7 +1607,7 @@ void Texture::computeInternalFormatWithImage(const osg::Image& image) const
             break;
 
         case(USE_ETC_COMPRESSION):
-            if (extensions->isTextureCompressionETCSupported())
+            if (extensions->isTextureCompressionETCSupported)
             {
                 switch(image.getPixelFormat())
                 {
@@ -1608,7 +1619,7 @@ void Texture::computeInternalFormatWithImage(const osg::Image& image) const
             break;
 
         case(USE_ETC2_COMPRESSION):
-            if (extensions->isTextureCompressionETC2Supported())
+            if (extensions->isTextureCompressionETC2Supported)
             {
                 switch(image.getPixelFormat())
                 {
@@ -1626,7 +1637,7 @@ void Texture::computeInternalFormatWithImage(const osg::Image& image) const
             break;
 
         case(USE_RGTC1_COMPRESSION):
-            if (extensions->isTextureCompressionRGTCSupported())
+            if (extensions->isTextureCompressionRGTCSupported)
             {
                 switch(image.getPixelFormat())
                 {
@@ -1640,7 +1651,7 @@ void Texture::computeInternalFormatWithImage(const osg::Image& image) const
             break;
 
         case(USE_RGTC2_COMPRESSION):
-            if (extensions->isTextureCompressionRGTCSupported())
+            if (extensions->isTextureCompressionRGTCSupported)
             {
                 switch(image.getPixelFormat())
                 {
@@ -1820,6 +1831,8 @@ void Texture::getCompressedSize(GLenum internalFormat, GLint width, GLint height
         blockSize = 8;
     else if (internalFormat == GL_COMPRESSED_RGBA_S3TC_DXT3_EXT || internalFormat == GL_COMPRESSED_RGBA_S3TC_DXT5_EXT)
         blockSize = 16;
+    else if (internalFormat == GL_ETC1_RGB8_OES)
+        blockSize = 8;
     else if (internalFormat == GL_COMPRESSED_RGB8_ETC2 || internalFormat == GL_COMPRESSED_SRGB8_ETC2)
         blockSize = 8;
     else if (internalFormat == GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2 || internalFormat == GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2)
@@ -1880,12 +1893,12 @@ void Texture::applyTexParameters(GLenum target, State& state) const
     // get the contextID (user defined ID of 0 upwards) for the
     // current OpenGL context.
     const unsigned int contextID = state.getContextID();
-    const Extensions* extensions = getExtensions(contextID,true);
+    const GLExtensions* extensions = state.get<GLExtensions>();
 
     WrapMode ws = _wrap_s, wt = _wrap_t, wr = _wrap_r;
 
     // GL_IBM_texture_mirrored_repeat, fall-back REPEAT
-    if (!extensions->isTextureMirroredRepeatSupported())
+    if (!extensions->isTextureMirroredRepeatSupported)
     {
         if (ws == MIRROR)
             ws = REPEAT;
@@ -1896,7 +1909,7 @@ void Texture::applyTexParameters(GLenum target, State& state) const
     }
 
     // GL_EXT_texture_edge_clamp, fall-back CLAMP
-    if (!extensions->isTextureEdgeClampSupported())
+    if (!extensions->isTextureEdgeClampSupported)
     {
         if (ws == CLAMP_TO_EDGE)
             ws = CLAMP;
@@ -1906,7 +1919,7 @@ void Texture::applyTexParameters(GLenum target, State& state) const
             wr = CLAMP;
     }
 
-    if(!extensions->isTextureBorderClampSupported())
+    if(!extensions->isTextureBorderClampSupported)
     {
         if(ws == CLAMP_TO_BORDER)
             ws = CLAMP;
@@ -1916,7 +1929,7 @@ void Texture::applyTexParameters(GLenum target, State& state) const
             wr = CLAMP;
     }
 
-    #if defined(OSG_GLES1_AVAILABLE) || defined(OSG_GLES2_AVAILABLE)
+    #if defined(OSG_GLES1_AVAILABLE) || defined(OSG_GLES2_AVAILABLE) || defined(OSG_GL3_AVAILABLE)
         if (ws == CLAMP) ws = CLAMP_TO_EDGE;
         if (wt == CLAMP) wt = CLAMP_TO_EDGE;
         if (wr == CLAMP) wr = CLAMP_TO_EDGE;
@@ -1925,7 +1938,7 @@ void Texture::applyTexParameters(GLenum target, State& state) const
     const Image * image = getImage(0);
     if( image &&
         image->isMipmap() &&
-        extensions->isTextureMaxLevelSupported() &&
+        extensions->isTextureMaxLevelSupported &&
         int( image->getNumMipmapLevels() ) <
             Image::computeNumberOfMipmapLevels( image->s(), image->t(), image->r() ) )
             glTexParameteri( target, GL_TEXTURE_MAX_LEVEL, image->getNumMipmapLevels() - 1 );
@@ -1942,7 +1955,7 @@ void Texture::applyTexParameters(GLenum target, State& state) const
     glTexParameteri( target, GL_TEXTURE_MAG_FILTER, _mag_filter);
 
     // Art: I think anisotropic filtering is not supported by the integer textures
-    if (extensions->isTextureFilterAnisotropicSupported() &&
+    if (extensions->isTextureFilterAnisotropicSupported &&
         _internalFormatType != SIGNED_INTEGER && _internalFormatType != UNSIGNED_INTEGER)
     {
         // note, GL_TEXTURE_MAX_ANISOTROPY_EXT will either be defined
@@ -1950,14 +1963,14 @@ void Texture::applyTexParameters(GLenum target, State& state) const
         glTexParameterf(target, GL_TEXTURE_MAX_ANISOTROPY_EXT, _maxAnisotropy);
     }
 
-    if (extensions->isTextureSwizzleSupported())
+    if (extensions->isTextureSwizzleSupported)
     {
         // note, GL_TEXTURE_SWIZZLE_RGBA will either be defined
         // by gl.h (or via glext.h) or by include/osg/Texture.
         glTexParameteriv(target, GL_TEXTURE_SWIZZLE_RGBA, _swizzle.ptr());
     }
 
-    if (extensions->isTextureBorderClampSupported())
+    if (extensions->isTextureBorderClampSupported)
     {
 
         #ifndef GL_TEXTURE_BORDER_COLOR
@@ -1981,7 +1994,7 @@ void Texture::applyTexParameters(GLenum target, State& state) const
 
     // integer textures are not supported by the shadow
     // GL_TEXTURE_1D_ARRAY_EXT could be included in the check below but its not yet implemented in OSG
-    if (extensions->isShadowSupported() &&
+    if (extensions->isShadowSupported &&
         (target == GL_TEXTURE_2D || target == GL_TEXTURE_1D || target == GL_TEXTURE_RECTANGLE || target == GL_TEXTURE_CUBE_MAP || target == GL_TEXTURE_2D_ARRAY_EXT ) &&
         _internalFormatType != SIGNED_INTEGER && _internalFormatType != UNSIGNED_INTEGER)
     {
@@ -1989,11 +2002,13 @@ void Texture::applyTexParameters(GLenum target, State& state) const
         {
             glTexParameteri(target, GL_TEXTURE_COMPARE_MODE_ARB, GL_COMPARE_R_TO_TEXTURE_ARB);
             glTexParameteri(target, GL_TEXTURE_COMPARE_FUNC_ARB, _shadow_compare_func);
-            glTexParameteri(target, GL_DEPTH_TEXTURE_MODE_ARB, _shadow_texture_mode);
+            #if defined(OSG_GL1_AVAILABLE) || defined(OSG_GL2_AVAILABLE)
+                glTexParameteri(target, GL_DEPTH_TEXTURE_MODE_ARB, _shadow_texture_mode);
+            #endif
 
             // if ambient value is 0 - it is default behaviour of GL_ARB_shadow
             // no need for GL_ARB_shadow_ambient in this case
-            if (extensions->isShadowAmbientSupported() && _shadow_ambient > 0)
+            if (extensions->isShadowAmbientSupported && _shadow_ambient > 0)
             {
                 glTexParameterf(target, TEXTURE_COMPARE_FAIL_VALUE_ARB, _shadow_ambient);
             }
@@ -2023,8 +2038,7 @@ void Texture::applyTexParameters(GLenum target, State& state) const
 
 void Texture::computeRequiredTextureDimensions(State& state, const osg::Image& image,GLsizei& inwidth, GLsizei& inheight,GLsizei& numMipmapLevels) const
 {
-    const unsigned int contextID = state.getContextID();
-    const Extensions* extensions = getExtensions(contextID,true);
+    const GLExtensions* extensions = state.get<GLExtensions>();
 
     int width,height;
 
@@ -2040,8 +2054,8 @@ void Texture::computeRequiredTextureDimensions(State& state, const osg::Image& i
     }
 
     // cap the size to what the graphics hardware can handle.
-    if (width>extensions->maxTextureSize()) width = extensions->maxTextureSize();
-    if (height>extensions->maxTextureSize()) height = extensions->maxTextureSize();
+    if (width>extensions->maxTextureSize) width = extensions->maxTextureSize;
+    if (height>extensions->maxTextureSize) height = extensions->maxTextureSize;
 
     inwidth = width;
     inheight = height;
@@ -2085,10 +2099,8 @@ void Texture::applyTexImage2D_load(State& state, GLenum target, const Image* ima
     OSG_NOTICE<<"glTexImage2D pixelFormat = "<<std::hex<<image->getPixelFormat()<<std::dec<<std::endl;
 #endif
 
-    // get the contextID (user defined ID of 0 upwards) for the
-    // current OpenGL context.
-    const unsigned int contextID = state.getContextID();
-    const Extensions* extensions = getExtensions(contextID,true);
+    // get extensions object
+    const GLExtensions* extensions = state.get<GLExtensions>();
 
     // select the internalFormat required for the texture.
     bool compressed_image = isCompressedInternalFormat((GLenum)image->getPixelFormat());
@@ -2140,7 +2152,7 @@ void Texture::applyTexImage2D_load(State& state, GLenum target, const Image* ima
     glPixelStorei(GL_UNPACK_ALIGNMENT,image->getPacking());
     unsigned int rowLength = image->getRowLength();
 
-    bool useClientStorage = extensions->isClientStorageSupported() && getClientStorageHint();
+    bool useClientStorage = extensions->isClientStorageSupported && getClientStorageHint();
     if (useClientStorage)
     {
         glPixelStorei(GL_UNPACK_CLIENT_STORAGE_APPLE,GL_TRUE);
@@ -2204,7 +2216,7 @@ void Texture::applyTexImage2D_load(State& state, GLenum target, const Image* ima
     bool useHardwareMipMapGeneration = mipmappingRequired && (!image->isMipmap() && isHardwareMipmapGenerationEnabled(state));
     bool useGluBuildMipMaps = mipmappingRequired && (!useHardwareMipMapGeneration && !image->isMipmap());
 
-    GLBufferObject* pbo = image->getOrCreateGLBufferObject(contextID);
+    GLBufferObject* pbo = image->getOrCreateGLBufferObject(state.getContextID());
     if (pbo && !needImageRescale && !useGluBuildMipMaps)
     {
         state.bindPixelBufferObject(pbo);
@@ -2265,7 +2277,7 @@ void Texture::applyTexImage2D_load(State& state, GLenum target, const Image* ima
             int width  = inwidth;
             int height = inheight;
 
-            bool useTexStorrage = extensions->isTexStorageEnabled();
+            bool useTexStorrage = extensions->isTextureStorageEnabled;
             GLenum sizedInternalFormat = 0;
 
             if(useTexStorrage)
@@ -2495,7 +2507,7 @@ void Texture::applyTexImage2D_subload(State& state, GLenum target, const Image* 
     // get the contextID (user defined ID of 0 upwards) for the
     // current OpenGL context.
     const unsigned int contextID = state.getContextID();
-    const Extensions* extensions = getExtensions(contextID,true);
+    const GLExtensions* extensions = state.get<GLExtensions>();
 
     // select the internalFormat required for the texture.
     bool compressed_image = isCompressedInternalFormat((GLenum)image->getPixelFormat());
@@ -2681,17 +2693,14 @@ bool Texture::isHardwareMipmapGenerationEnabled(const State& state) const
 {
     if (_useHardwareMipMapGeneration)
     {
-        unsigned int contextID = state.getContextID();
-        const Extensions* extensions = getExtensions(contextID,true);
-
-        if (extensions->isGenerateMipMapSupported())
+        const GLExtensions* extensions = state.get<GLExtensions>();
+        if (extensions->isGenerateMipMapSupported)
         {
             return true;
         }
 
-        const FBOExtensions* fbo_ext = FBOExtensions::instance(contextID,true);
-
-        if (fbo_ext->isSupported() && fbo_ext->glGenerateMipmap)
+        // FrameBufferObjects are required for glGenerateMipmap
+        if (extensions->isFrameBufferObjectSupported && extensions->glGenerateMipmap)
         {
             return true;
         }
@@ -2708,12 +2717,12 @@ Texture::GenerateMipmapMode Texture::mipmapBeforeTexImage(const State& state, bo
         return GENERATE_MIPMAP;
 #else
 
-        FBOExtensions* fbo_ext = FBOExtensions::instance(state.getContextID(),true);
-        bool useGenerateMipMap = fbo_ext->isSupported() && fbo_ext->glGenerateMipmap;
+        const GLExtensions* extensions = state.get<GLExtensions>();
+        bool useGenerateMipMap = extensions->isFrameBufferObjectSupported && extensions->glGenerateMipmap;
 
         if (useGenerateMipMap)
         {
-            if (Texture::getExtensions(state.getContextID(),true)->getPreferGenerateMipmapSGISForPowerOfTwo())
+            if (extensions->preferGenerateMipmapSGISForPowerOfTwo)
             {
                 int width = getTextureWidth();
                 int height = getTextureHeight();
@@ -2745,8 +2754,8 @@ void Texture::mipmapAfterTexImage(State& state, GenerateMipmapMode beforeResult)
             TextureObject* textureObject = getTextureObject(contextID);
             if (textureObject)
             {
-                osg::FBOExtensions* fbo_ext = osg::FBOExtensions::instance(contextID, true);
-                fbo_ext->glGenerateMipmap(textureObject->target());
+                osg::GLExtensions* ext = state.get<GLExtensions>();
+                ext->glGenerateMipmap(textureObject->target());
             }
             break;
         }
@@ -2778,13 +2787,13 @@ void Texture::generateMipmap(State& state) const
     }
 
     // get fbo extension which provides us with the glGenerateMipmapEXT function
-    osg::FBOExtensions* fbo_ext = osg::FBOExtensions::instance(state.getContextID(), true);
+    osg::GLExtensions* ext = state.get<GLExtensions>();
 
-    // check if the function is supported
-    if (fbo_ext->isSupported() && fbo_ext->glGenerateMipmap)
+    // FrameBufferObjects are required for glGenerateMipmap
+    if (ext->isFrameBufferObjectSupported && ext->glGenerateMipmap)
     {
         textureObject->bind();
-        fbo_ext->glGenerateMipmap(textureObject->target());
+        ext->glGenerateMipmap(textureObject->target());
 
         // inform state that this texture is the current one bound.
         state.haveAppliedTextureAttribute(state.getActiveTextureUnit(), this);
@@ -2826,144 +2835,5 @@ void Texture::releaseGLObjects(State* state) const
         }
     }
 }
-
-Texture::Extensions* Texture::getExtensions(unsigned int contextID,bool createIfNotInitalized)
-{
-    if (!s_extensions[contextID] && createIfNotInitalized) s_extensions[contextID] = new Extensions(contextID);
-    return s_extensions[contextID].get();
-}
-
-void Texture::setExtensions(unsigned int contextID,Extensions* extensions)
-{
-    s_extensions[contextID] = extensions;
-}
-
-Texture::Extensions::Extensions(unsigned int contextID)
-{
-    const char* version = (const char*) glGetString( GL_VERSION );
-    if (!version)
-    {
-        OSG_FATAL<<"Error: In Texture::Extensions::setupGLExtensions(..) OpenGL version test failed, requires valid graphics context."<<std::endl;
-        return;
-    }
-
-    const char* renderer = (const char*) glGetString(GL_RENDERER);
-    std::string rendererString(renderer ? renderer : "");
-
-    bool radeonHardwareDetected = (rendererString.find("Radeon")!=std::string::npos || rendererString.find("RADEON")!=std::string::npos);
-    bool fireGLHardwareDetected = (rendererString.find("FireGL")!=std::string::npos || rendererString.find("FIREGL")!=std::string::npos);
-
-    bool builtInSupport = OSG_GLES2_FEATURES || OSG_GL3_FEATURES;
-
-    _isMultiTexturingSupported = builtInSupport || OSG_GLES1_FEATURES ||
-                                 isGLExtensionOrVersionSupported( contextID,"GL_ARB_multitexture", 1.3f) ||
-                                 isGLExtensionOrVersionSupported(contextID,"GL_EXT_multitexture", 1.3f);
-
-    _isTextureFilterAnisotropicSupported = isGLExtensionSupported(contextID,"GL_EXT_texture_filter_anisotropic");
-
-    _isTextureSwizzleSupported = isGLExtensionSupported(contextID,"GL_ARB_texture_swizzle");
-
-    _isTextureCompressionARBSupported = builtInSupport || isGLExtensionOrVersionSupported(contextID,"GL_ARB_texture_compression", 1.3f);
-
-    _isTextureCompressionS3TCSupported = isGLExtensionSupported(contextID,"GL_EXT_texture_compression_s3tc");
-
-    _isTextureCompressionPVRTC2BPPSupported = isGLExtensionSupported(contextID,"GL_IMG_texture_compression_pvrtc");
-
-    _isTextureCompressionPVRTC4BPPSupported = _isTextureCompressionPVRTC2BPPSupported;//covered by same extension
-
-    _isTextureCompressionETCSupported = isGLExtensionSupported(contextID,"GL_OES_compressed_ETC1_RGB8_texture");
-
-    _isTextureCompressionETC2Supported = isGLExtensionSupported(contextID,"GL_ARB_ES3_compatibility");
-
-    _isTextureCompressionRGTCSupported = isGLExtensionSupported(contextID,"GL_EXT_texture_compression_rgtc");
-
-    _isTextureCompressionPVRTCSupported = isGLExtensionSupported(contextID,"GL_IMG_texture_compression_pvrtc");
-
-    _isTextureMirroredRepeatSupported = builtInSupport ||
-                                        isGLExtensionOrVersionSupported(contextID,"GL_IBM_texture_mirrored_repeat", 1.4f) ||
-                                        isGLExtensionOrVersionSupported(contextID,"GL_ARB_texture_mirrored_repeat", 1.4f);
-
-    _isTextureEdgeClampSupported = builtInSupport ||
-                                   isGLExtensionOrVersionSupported(contextID,"GL_EXT_texture_edge_clamp", 1.2f) ||
-                                   isGLExtensionOrVersionSupported(contextID,"GL_SGIS_texture_edge_clamp", 1.2f);
-
-
-    _isTextureBorderClampSupported = OSG_GL3_FEATURES ||
-                                     ((OSG_GL1_FEATURES || OSG_GL2_FEATURES) && isGLExtensionOrVersionSupported(contextID,"GL_ARB_texture_border_clamp", 1.3f));
-
-    _isGenerateMipMapSupported = builtInSupport || isGLExtensionOrVersionSupported(contextID,"GL_SGIS_generate_mipmap", 1.4f);
-
-    _preferGenerateMipmapSGISForPowerOfTwo = (radeonHardwareDetected||fireGLHardwareDetected) ? false : true;
-
-    _isTextureMultisampledSupported = isGLExtensionSupported(contextID,"GL_ARB_texture_multisample");
-
-    _isShadowSupported = OSG_GL3_FEATURES || isGLExtensionSupported(contextID,"GL_ARB_shadow");
-
-    _isShadowAmbientSupported = isGLExtensionSupported(contextID,"GL_ARB_shadow_ambient");
-
-    _isClientStorageSupported = isGLExtensionSupported(contextID,"GL_APPLE_client_storage");
-
-    _isNonPowerOfTwoTextureNonMipMappedSupported = builtInSupport || isGLExtensionOrVersionSupported(contextID,"GL_ARB_texture_non_power_of_two", 2.0) || isGLExtensionSupported(contextID,"GL_APPLE_texture_2D_limited_npot");
-
-    _isNonPowerOfTwoTextureMipMappedSupported = builtInSupport || _isNonPowerOfTwoTextureNonMipMappedSupported;
-
-    _isTextureIntegerEXTSupported = OSG_GL3_FEATURES || isGLExtensionSupported(contextID, "GL_EXT_texture_integer");
-
-    #if 0
-    if (rendererString.find("Radeon")!=std::string::npos || rendererString.find("RADEON")!=std::string::npos)
-    {
-        _isNonPowerOfTwoTextureMipMappedSupported = false;
-        OSG_INFO<<"Disabling _isNonPowerOfTwoTextureMipMappedSupported for ATI hardware."<<std::endl;
-    }
-    #endif
-
-    if (rendererString.find("GeForce FX")!=std::string::npos)
-    {
-        _isNonPowerOfTwoTextureMipMappedSupported = false;
-        OSG_INFO<<"Disabling _isNonPowerOfTwoTextureMipMappedSupported for GeForce FX hardware."<<std::endl;
-    }
-
-    _maxTextureSize=0;
-    glGetIntegerv(GL_MAX_TEXTURE_SIZE,&_maxTextureSize);
-
-    char *ptr;
-    if( (ptr = getenv("OSG_MAX_TEXTURE_SIZE")) != 0)
-    {
-        GLint osg_max_size = atoi(ptr);
-
-        if (osg_max_size<_maxTextureSize)
-        {
-
-            _maxTextureSize = osg_max_size;
-        }
-    }
-
-    setGLExtensionFuncPtr(_glTexStorage2D,"glTexStorage2D","glTexStorage2DARB");
-    setGLExtensionFuncPtr(_glCompressedTexImage2D,"glCompressedTexImage2D","glCompressedTexImage2DARB");
-    setGLExtensionFuncPtr(_glCompressedTexSubImage2D,"glCompressedTexSubImage2D","glCompressedTexSubImage2DARB");
-    setGLExtensionFuncPtr(_glGetCompressedTexImage,"glGetCompressedTexImage","glGetCompressedTexImageARB");;
-    setGLExtensionFuncPtr(_glTexImage2DMultisample, "glTexImage2DMultisample", "glTexImage2DMultisampleARB");
-
-    setGLExtensionFuncPtr(_glTexParameterIiv, "glTexParameterIiv", "glTexParameterIivARB");
-    setGLExtensionFuncPtr(_glTexParameterIuiv, "glTexParameterIuiv", "glTexParameterIuivARB");
-
-
-    if (_glTexParameterIiv == NULL) setGLExtensionFuncPtr(_glTexParameterIiv, "glTexParameterIivEXT");
-    if (_glTexParameterIuiv == NULL) setGLExtensionFuncPtr(_glTexParameterIuiv, "glTexParameterIuivEXT");
-
-    setGLExtensionFuncPtr(_glBindImageTexture, "glBindImageTexture", "glBindImageTextureARB");
-
-    _isTextureMaxLevelSupported = ( getGLVersionNumber() >= 1.2f );
-
-    _isTextureStorageEnabled = isTexStorage2DSupported();
-    if ( (ptr = getenv("OSG_GL_TEXTURE_STORAGE"))  != 0 && isTexStorage2DSupported())
-    {
-        if (strcmp(ptr,"OFF")==0 || strcmp(ptr,"DISABLE")==0 ) _isTextureStorageEnabled = false;
-        else _isTextureStorageEnabled = true;
-    }
-
-    OSG_DEBUG<<"Texture::Extensions::Extensionts() _isTextureStorageEnabled = "<<_isTextureStorageEnabled<<std::endl;
-}
-
 
 }

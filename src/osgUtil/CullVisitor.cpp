@@ -1364,19 +1364,41 @@ void CullVisitor::apply(osg::ClearNode& node)
 namespace osgUtil
 {
 
-class RenderStageCache : public osg::Object
+class RenderStageCache : public osg::Object, public osg::Observer
 {
     public:
 
         RenderStageCache() {}
         RenderStageCache(const RenderStageCache&, const osg::CopyOp&) {}
+        virtual ~RenderStageCache()
+        {
+            for(RenderStageMap::iterator itr = _renderStageMap.begin();
+                itr != _renderStageMap.end();
+                ++itr)
+            {
+                itr->first->removeObserver(this);
+            }
+        }
 
         META_Object(osgUtil, RenderStageCache);
+
+        virtual void objectDeleted(void* object)
+        {
+            osg::Referenced* ref = reinterpret_cast<osg::Referenced*>(object);
+            osgUtil::CullVisitor* cv = dynamic_cast<osgUtil::CullVisitor*>(ref);
+            OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_mutex);
+            RenderStageMap::iterator itr = _renderStageMap.find(cv);
+            if (itr!=_renderStageMap.end())
+            {
+                _renderStageMap.erase(cv);
+            }
+        }
 
         void setRenderStage(CullVisitor* cv, RenderStage* rs)
         {
             OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_mutex);
             _renderStageMap[cv] = rs;
+            cv->addObserver(this);
         }
 
         RenderStage* getRenderStage(osgUtil::CullVisitor* cv)
@@ -1543,7 +1565,7 @@ void CullVisitor::apply(osg::Camera& camera)
         {
             OpenThreads::ScopedLock<OpenThreads::Mutex> lock(*(camera.getDataChangeMutex()));
 
-            rtts = new osgUtil::RenderStage;
+            rtts = _rootRenderStage.valid() ? osg::cloneType(_rootRenderStage.get()) : new osgUtil::RenderStage;
             rsCache->setRenderStage(this,rtts.get());
 
             rtts->setCamera(&camera);
@@ -1574,7 +1596,7 @@ void CullVisitor::apply(osg::Camera& camera)
             rtts->reset();
         }
 
-        // set up clera masks/values
+        // set up clear masks/values
         rtts->setClearDepth(camera.getClearDepth());
         rtts->setClearAccum(camera.getClearAccum());
         rtts->setClearStencil(camera.getClearStencil());
@@ -1642,7 +1664,7 @@ void CullVisitor::apply(osg::Camera& camera)
 
 
         // and the render to texture stage to the current stages
-        // dependancy list.
+        // dependency list.
         switch(camera.getRenderOrder())
         {
             case osg::Camera::PRE_RENDER:

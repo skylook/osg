@@ -23,7 +23,7 @@ more indepth instructions.
 
 Robert Osfield.
 Project Lead.
-24th July 2013.
+3rd July 2015.
 
 --
 
@@ -43,13 +43,12 @@ OpenSceneGraph's CMake build can be found at:
     http://www.openscenegraph.org/projects/osg/wiki/Build/CMake
 
 Under unices (i.e. Linux, IRIX, Solaris, Free-BSD, HP-Ux, AIX, OSX)
-use the cmake or ccmake command-line utils, or use the included tiny
-configure script that'll run cmake for you.  The configure script
-simply runs 'cmake . -DCMAKE_BUILD_TYPE=Release' to ensure that you
-get the best performance from your final libraries/applications.
+use the cmake or ccmake command-line utils. Note that cmake . defaults
+to building Release to ensure that you get the best performance from
+your final libraries/applications.
 
     cd OpenSceneGraph
-    ./configure
+    cmake .
     make
     sudo make install
 
@@ -62,7 +61,7 @@ directory alongside the OpenSceneGraph use:
 
     mkdir build
     cd build
-    cmake ../OpenSceneGraph -DCMAKE_BUILD_TYPE=Release
+    cmake ../OpenSceneGraph
     make
     sudo make install
 
@@ -167,7 +166,7 @@ Section 3. Release notes on iOS build, by Thomas Hoghart
   This will give us the static build we need for iPhone.
 * Disable OSG_GL1_AVAILABLE, OSG_GL2_AVAILABLE, OSG_GL3_AVAILABLE,
   OSG_GL_DISPLAYLISTS_AVAILABLE, OSG_GL_VERTEX_FUNCS_AVAILABLE
-* Enable OSG_GLES1_AVAILABLE *OR* OSG_GLES2_AVAILABLE
+* Enable OSG_GLES1_AVAILABLE *OR* OSG_GLES2_AVAILABLE *OR* OSG_GLES3_AVAILABLE (GLES3 will enable GLES2 features)
 * Ensure OSG_WINDOWING_SYSTEM is set to IOS
 * Change FREETYPE include and library paths to an iPhone version
   (OpenFrameworks has one bundled with its distribution)

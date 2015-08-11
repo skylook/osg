@@ -140,7 +140,7 @@ static int getContainerProperty(lua_State * _lua)
             osgDB::VectorBaseSerializer* vs = dynamic_cast<osgDB::VectorBaseSerializer*>(bs);
             if (vs)
             {
-                const void* dataPtr = vs->getElement(*object, index);
+                const void* dataPtr = vs->getElement(*object, (unsigned int) index);
                 if (dataPtr)
                 {
                     SerializerScratchPad valuesp(vs->getElementType(), dataPtr, vs->getElementSize());
@@ -191,7 +191,7 @@ static int setContainerProperty(lua_State* _lua)
                 SerializerScratchPad ssp;
                 lse->getDataFromStack(&ssp, vs->getElementType(), 3);
                 {
-                    vs->setElement(*object, index, ssp.data);
+                    vs->setElement(*object, (unsigned int) index, ssp.data);
                 }
             }
             return 0;
@@ -1942,7 +1942,7 @@ void LuaScriptEngine::initialize()
         lua_pop(_lua,1);
     }
 
-    // Set up the __newindex and __index methods for looking up implementations of Object properties
+    // Set up the __tostring methods to be able to convert tables into strings so they can be output for debugging purposes.
     {
         luaL_newmetatable(_lua, "LuaScriptEngine.Table");
 
@@ -2778,7 +2778,7 @@ int LuaScriptEngine::getDataFromStack(SerializerScratchPad* ssp, osgDB::BaseSeri
         {
             if (lua_isboolean(_lua, pos))
             {
-                ssp->set(static_cast<bool>(lua_toboolean(_lua, pos)));
+                ssp->set(static_cast<bool>(lua_toboolean(_lua, pos)!=0));
                 return 0;
             }
             else if (lua_isnumber(_lua, pos))
@@ -3116,7 +3116,7 @@ int LuaScriptEngine::setPropertyFromStack(osg::Object* object, const std::string
         {
             if (lua_isboolean(_lua, -1))
             {
-                _ci.setProperty(object, propertyName, static_cast<bool>(lua_toboolean(_lua, -1)));
+                _ci.setProperty(object, propertyName, static_cast<bool>(lua_toboolean(_lua, -1)!=0));
                 return 0;
             }
             else if (lua_isnumber(_lua, -1))
@@ -3808,7 +3808,7 @@ void LuaScriptEngine::pushValue(const osg::Matrixf& value) const
     {
         for(unsigned int c=0; c<4; ++c)
         {
-            lua_pushnumber(_lua, r*4+c); lua_pushinteger(_lua, value(r,c)); lua_settable(_lua, -3);
+            lua_pushnumber(_lua, r*4+c); lua_pushinteger(_lua, (lua_Integer) value(r,c)); lua_settable(_lua, -3);
         }
     }
 }
@@ -3869,7 +3869,7 @@ void LuaScriptEngine::pushValue(const osg::Matrixd& value) const
     {
         for(unsigned int c=0; c<4; ++c)
         {
-            lua_pushnumber(_lua, r*4+c); lua_pushinteger(_lua, value(r,c)); lua_settable(_lua, -3);
+            lua_pushinteger(_lua, r*4+c); lua_pushnumber(_lua, value(r,c)); lua_settable(_lua, -3);
         }
     }
 }
